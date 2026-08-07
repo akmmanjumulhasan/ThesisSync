@@ -1,0 +1,45 @@
+{
+  "name": "thesissync",
+  "version": "1.0.0",
+  "description": "ThesisSync: CSE471 Group 10. Module 1 (Member 2): Unified Matchmaking Engine, plus shared registration/login.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akmmanjumulhasan/ThesisSync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/akmmanjumulhasan/ThesisSync/issues"
+  },
+  "homepage": "https://github.com/akmmanjumulhasan/ThesisSync#readme",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "bcryptjs": "^3.0.2",
+    "jose": "^6.0.10",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "prisma": "^7.9.1",
+    "tailwindcss": "^4",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
