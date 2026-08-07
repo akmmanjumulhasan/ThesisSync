@@ -29,16 +29,35 @@ model User {
   role         Role     @default(STUDENT)
   createdAt    DateTime @default(now())
 
+  // Module 1 (Member 1): Research Landscape & Trend Analyzer
+  researchQueries ResearchQuery[]
+
   // Module 1 (Member 2): Unified Matchmaking Engine
   studentProfile    StudentProfile?
   developerProfile  DeveloperProfile?
   supervisorProfile SupervisorProfile?
-  sentRequests      MatchRequest[]      @relation("StudentRequests")
-  sentInvites       TeamInvite[]        @relation("SentInvites")
-  receivedInvites   TeamInvite[]        @relation("ReceivedInvites")
+  sentRequests      MatchRequest[]     @relation("StudentRequests")
+  sentInvites       TeamInvite[]       @relation("SentInvites")
+  receivedInvites   TeamInvite[]       @relation("ReceivedInvites")
 
   // Module 3 (Member 2): AI Mock Defense Simulator (not in scope here, kept for teammates)
   defenseSessions MockDefenseSession[]
+}
+
+/// Module 1 (Member 1): Research Landscape & Trend Analyzer.
+/// One row per "map the landscape" run: the topic searched, the derived
+/// coverage summary, and the field-growth verdict shown to the student.
+model ResearchQuery {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic            String
+  heavilyCovered   String[] @default([])
+  understudiedGaps String[] @default([])
+  fieldStatus      String   @default("active") // "growing" | "active" | "saturating"
+  createdAt        DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// Student-only fields used by the Unified Matchmaking Engine:
