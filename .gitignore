@@ -1,0 +1,23 @@
+# dependencies
+node_modules
+
+# environment variables — never commit secrets
+.env
+.env.local
+
+# Next.js build output
+.next
+out
+
+# old reference implementation (Module 1 was rebuilt standalone from this; not part of the app)
+thesis-sync
+
+# prisma legacy generated output
+/generated/prisma
+
+# misc
+*.tsbuildinfo
+npm-debug.log*
+
+# personal Claude Code tool-permission overrides — not shared project config
+.claude/settings.local.json
