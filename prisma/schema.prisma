@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  SUPERVISOR
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+/// Common Workflow #1: Registration & Login. Shared by every module.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  studentId    String?  @unique // student ID or faculty ID, per the registration form
+  department   String?
+  role         Role     @default(STUDENT)
+  createdAt    DateTime @default(now())
+
+  // Module 1 (Member 2): Unified Matchmaking Engine
+  studentProfile    StudentProfile?
+  developerProfile  DeveloperProfile?
+  supervisorProfile SupervisorProfile?
+  sentRequests      MatchRequest[]      @relation("StudentRequests")
+  sentInvites       TeamInvite[]        @relation("SentInvites")
+  receivedInvites   TeamInvite[]        @relation("ReceivedInvites")
+
+  // Module 3 (Member 2): AI Mock Defense Simulator (not in scope here, kept for teammates)
+  defenseSessions MockDefenseSession[]
+}
+
+/// Student-only fields used by the Unified Matchmaking Engine:
+/// researchKeywords power Supervisor mode, declaredSkills power Teammate mode.
+model StudentProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  researchKeywords String[] @default([])
+  declaredSkills   String[] @default([])
+  openToTeam       Boolean  @default(true)
+  teamPost         String?
+  updatedAt        DateTime @updatedAt
+}
+
+/// GitHub-verified developer signal for Teammate mode. A student only enters the
+/// match pool once isVerified is true (see /api/github/verify).
+model DeveloperProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubUsername  String   @unique
+  isVerified      Boolean  @default(false)
+  topLanguages    String[] @default([])
+  totalCommits    Int      @default(0)
+  topRepositories String[] @default([])
+  updatedAt       DateTime @updatedAt
+}
+
+/// Faculty-only fields used by Supervisor mode matching.
+model SupervisorProfile {
+  id                String         @id @default(uuid())
+  userId            String         @unique
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  researchInterests String[]       @default([])
+  maxLoad           Int            @default(5)
+  activeLoad        Int            @default(0)
+  isAvailable       Boolean        @default(true)
+  avgResponseDays   Float          @default(3)
+  receivedRequests  MatchRequest[] @relation("SupervisorRequests")
+}
+
+/// Supervisor mode: a student sends a supervision request directly from the ranked list.
+model MatchRequest {
+  id           String            @id @default(uuid())
+  studentId    String
+  student      User              @relation("StudentRequests", fields: [studentId], references: [id], onDelete: Cascade)
+  supervisorId String
+  supervisor   SupervisorProfile @relation("SupervisorRequests", fields: [supervisorId], references: [id], onDelete: Cascade)
+  status       RequestStatus     @default(PENDING)
+  createdAt    DateTime          @default(now())
+
+  @@unique([studentId, supervisorId])
+}
+
+/// Teammate mode: a student invites another GitHub-verified student to team up.
+model TeamInvite {
+  id         String        @id @default(uuid())
+  fromUserId String
+  from       User          @relation("SentInvites", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId   String
+  to         User          @relation("ReceivedInvites", fields: [toUserId], references: [id], onDelete: Cascade)
+  status     RequestStatus @default(PENDING)
+  createdAt  DateTime      @default(now())
+
+  @@unique([fromUserId, toUserId])
+}
+
+/// --- Module 3 (Member 2) placeholders, kept so other members' work isn't blocked ---
+
+model ThesisProposal {
+  id          String               @id @default(uuid())
+  title       String
+  abstract    String
+  methodology String
+  limitations String
+  sessions    MockDefenseSession[]
+}
+
+model MockDefenseSession {
+  id           String               @id @default(uuid())
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposalId   String
+  proposal     ThesisProposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  isActive     Boolean              @default(true)
+  overallScore Float?
+  interactions DefenseInteraction[]
+  createdAt    DateTime             @default(now())
+}
+
+model DefenseInteraction {
+  id         String             @id @default(uuid())
+  sessionId  String
+  session    MockDefenseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question   String
+  answer     String?
+  evaluation String?
+  score      Float?
+  createdAt  DateTime           @default(now())
+}
