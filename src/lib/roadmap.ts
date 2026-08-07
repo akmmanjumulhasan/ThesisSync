@@ -87,8 +87,9 @@ export const ROADMAP: RoadmapModule[] = [
         description:
           "Maps what's already published on a topic and highlights where a novel contribution still fits.",
         icon: CompassIcon,
-        status: "planned",
-        owner: "Member 1",
+        status: "live",
+        owner: "Member 1 · You",
+        liveHref: "/dashboard/research",
       },
       {
         title: "Unified Matchmaking Engine",
