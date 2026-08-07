@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f4f5;
+  --surface: #ffffff;
+  --border-color: #e4e4e7;
+  --foreground: #18181b;
+  --muted: #71717a;
+
+  --brand: #46101f;
+  --brand-foreground: #ffffff;
+
+  --accent: #059669;
+  --accent-hover: #047857;
+  --accent-foreground: #ffffff;
+
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --danger-foreground: #991b1b;
+
+  --success-bg: #d1fae5;
+  --success-foreground: #065f46;
+
+  --warning-bg: #f5e8c9;
+  --warning-foreground: #7c5a12;
+
+  /* Dashboard workspace shell: dark-navy sidebar + warm cream content, its own identity
+     distinct from the maroon/sans marketing & auth pages. */
+  --sidebar-bg: #0d1526;
+  --sidebar-fg: #e7eaf2;
+  --sidebar-muted: #8792a8;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --content-bg: #f6f4ee;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border-color);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-foreground: var(--danger-foreground);
+
+  --color-success-bg: var(--success-bg);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-content-bg: var(--content-bg);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-lora);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
