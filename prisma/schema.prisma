@@ -18,6 +18,29 @@ enum RequestStatus {
   DECLINED
 }
 
+/// Module 1 (Member 3): Structured Thesis Proposal Builder.
+enum ProposalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RETURNED
+}
+
+/// Module 1 (Member 3): auto-resolution state of a cited DOI against CrossRef.
+enum DoiStatus {
+  PENDING
+  VALIDATED
+  NOT_FOUND
+}
+
+/// Module 1 (Member 3): one row per submit-or-decide event, feeding the
+/// "Supervisor feedback history" timeline.
+enum ProposalEvent {
+  SUBMITTED
+  APPROVED
+  RETURNED
+}
+
 /// Common Workflow #1: Registration & Login. Shared by every module.
 model User {
   id           String   @id @default(uuid())
@@ -42,6 +65,10 @@ model User {
 
   // Module 3 (Member 2): AI Mock Defense Simulator (not in scope here, kept for teammates)
   defenseSessions MockDefenseSession[]
+
+  // Module 1 (Member 3): Structured Thesis Proposal Builder
+  proposal        ThesisProposal?        @relation("StudentProposal")
+  proposalHistory ProposalHistoryEntry[] @relation("ProposalActor")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -126,15 +153,66 @@ model TeamInvite {
   @@unique([fromUserId, toUserId])
 }
 
-/// --- Module 3 (Member 2) placeholders, kept so other members' work isn't blocked ---
-
+/// Module 1 (Member 3): Structured Thesis Proposal Builder (API: CrossRef).
+/// One row per student — the proposal is a single mandatory gate that gets
+/// revised in place (see ProposalHistoryEntry for the version/feedback
+/// timeline) rather than resubmitted as a new record each time.
+///
+/// title/abstract/methodology/limitations predate this feature (added as a
+/// placeholder for Module 3 (Member 2)'s Mock Defense Simulator, which reads
+/// a proposal's content as AI context) and are kept, now default-valued, so
+/// that still-planned feature isn't blocked by this one shipping first.
 model ThesisProposal {
-  id          String               @id @default(uuid())
-  title       String
-  abstract    String
-  methodology String
-  limitations String
-  sessions    MockDefenseSession[]
+  id          String @id @default(uuid())
+  title       String @default("")
+  abstract    String @default("")
+  methodology String @default("")
+  limitations String @default("")
+
+  studentId String @unique
+  student   User   @relation("StudentProposal", fields: [studentId], references: [id], onDelete: Cascade)
+
+  problemStatement     String         @default("")
+  researchObjectives   String         @default("")
+  methodologyOutline   String         @default("")
+  expectedContribution String         @default("")
+  status               ProposalStatus @default(DRAFT)
+  version              Int            @default(1)
+  submittedAt          DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  references ProposalReference[]
+  history    ProposalHistoryEntry[]
+  sessions   MockDefenseSession[]
+}
+
+/// A cited DOI on a proposal, auto-resolved against CrossRef's public Works API.
+model ProposalReference {
+  id            String         @id @default(uuid())
+  proposalId    String
+  proposal      ThesisProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  doi           String
+  resolvedTitle String?
+  resolvedVenue String?
+  resolvedYear  Int?
+  status        DoiStatus      @default(PENDING)
+  createdAt     DateTime       @default(now())
+}
+
+/// The "Supervisor feedback history" timeline: a submission event (student,
+/// no comment) or a decision event (supervisor, with remarks), one per
+/// proposal version.
+model ProposalHistoryEntry {
+  id         String         @id @default(uuid())
+  proposalId String
+  proposal   ThesisProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  version    Int
+  event      ProposalEvent
+  comment    String?
+  actorId    String?
+  actor      User?          @relation("ProposalActor", fields: [actorId], references: [id])
+  createdAt  DateTime       @default(now())
 }
 
 model MockDefenseSession {
