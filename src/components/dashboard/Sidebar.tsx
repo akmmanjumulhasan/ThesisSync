@@ -23,7 +23,8 @@ const SUPERVISOR_NAV: NavGroup[] = [
     stage: "Workspace",
     items: [
       { number: 1, title: "Supervision requests", href: "/dashboard/requests" },
-      { number: 2, title: "Profile", href: "/dashboard/profile" },
+      { number: 2, title: "Proposals to review", href: "/dashboard/proposal-reviews" },
+      { number: 3, title: "Profile", href: "/dashboard/profile" },
     ],
   },
 ];
