@@ -105,8 +105,9 @@ export const ROADMAP: RoadmapModule[] = [
         description:
           "A guided proposal form with CrossRef-validated citations, gating chapter work until it's approved.",
         icon: DocumentIcon,
-        status: "planned",
+        status: "live",
         owner: "Member 3",
+        liveHref: "/dashboard/proposal",
       },
     ],
   },
