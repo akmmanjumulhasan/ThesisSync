@@ -41,6 +41,16 @@ enum ProposalEvent {
   RETURNED
 }
 
+/// Module 2 (Member 1): Automated Evaluation & LaTeX Chart Generator.
+/// Whether the uploaded predicted/actual columns resolved to exactly two
+/// labels (classic TP/FP/TN/FN formulas apply) or more (macro/weighted
+/// averages apply instead). Kept on the run so the client doesn't have to
+/// re-derive it from labels.length.
+enum EvaluationKind {
+  BINARY
+  MULTICLASS
+}
+
 /// Common Workflow #1: Registration & Login. Shared by every module.
 model User {
   id           String   @id @default(uuid())
@@ -69,6 +79,9 @@ model User {
   // Module 1 (Member 3): Structured Thesis Proposal Builder
   proposal        ThesisProposal?        @relation("StudentProposal")
   proposalHistory ProposalHistoryEntry[] @relation("ProposalActor")
+
+  // Module 2 (Member 1): Automated Evaluation & LaTeX Chart Generator
+  evaluationRuns EvaluationRun[]
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -83,6 +96,30 @@ model ResearchQuery {
   understudiedGaps String[] @default([])
   fieldStatus      String   @default("active") // "growing" | "active" | "saturating"
   createdAt        DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Module 2 (Member 1): Automated Evaluation & LaTeX Chart Generator.
+/// One row per uploaded results CSV: the derived confusion matrix and metrics
+/// are stored as-computed (rather than re-derived from raw rows on every
+/// view) since the source CSV itself isn't persisted — only its summary is.
+model EvaluationRun {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  datasetName     String
+  rowCount        Int
+  kind            EvaluationKind
+  labels          String[]       @default([])
+  /// { labels: string[], matrix: number[][] } — matrix[actualIdx][predictedIdx]
+  confusionMatrix Json
+  /// { accuracy, macroPrecision, macroRecall, macroF1, weightedPrecision,
+  ///   weightedRecall, weightedF1, perClass: [...], binary?: {...},
+  ///   roc?: { points: [...], auc } } — roc only present for binary runs
+  /// that included a score/probability column.
+  metrics         Json
+  createdAt       DateTime       @default(now())
 
   @@index([userId, createdAt])
 }
