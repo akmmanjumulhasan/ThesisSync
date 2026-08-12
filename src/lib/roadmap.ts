@@ -120,8 +120,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "Automated Evaluation & LaTeX Charts",
         description: "Turns a results CSV into publication-ready charts and formal evaluation notation.",
         icon: ChartIcon,
-        status: "planned",
-        owner: "Member 1",
+        status: "live",
+        owner: "Member 1 · You",
+        liveHref: "/dashboard/evaluation",
       },
       {
         title: "Git-to-Task Contribution Analytics",
