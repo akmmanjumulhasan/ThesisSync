@@ -15,10 +15,24 @@ export default async function MatchmakingPage() {
     );
   }
 
-  const [profile, pendingInviteCount] = await Promise.all([
+  const [profile, pendingInviteCount, acceptedInvites] = await Promise.all([
     prisma.studentProfile.findUnique({ where: { userId: session.sub } }),
     prisma.teamInvite.count({ where: { toUserId: session.sub, status: "PENDING" } }),
+    // Counted rather than tallied: a pair can hold an accepted invite in both
+    // directions, and that is still one teammate. /api/match/team dedupes the
+    // same way, so the badge matches the roster it opens.
+    prisma.teamInvite.findMany({
+      where: {
+        status: "ACCEPTED",
+        OR: [{ fromUserId: session.sub }, { toUserId: session.sub }],
+      },
+      select: { fromUserId: true, toUserId: true },
+    }),
   ]);
+
+  const teamCount = new Set(
+    acceptedInvites.map((i) => (i.fromUserId === session.sub ? i.toUserId : i.fromUserId))
+  ).size;
 
   return (
     <MatchmakingClient
@@ -26,6 +40,7 @@ export default async function MatchmakingPage() {
       initialKeywords={(profile?.researchKeywords ?? []).join(", ")}
       initialSkills={(profile?.declaredSkills ?? []).join(", ")}
       initialPendingInviteCount={pendingInviteCount}
+      initialTeamCount={teamCount}
     />
   );
 }
