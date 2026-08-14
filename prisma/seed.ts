@@ -19,6 +19,9 @@ async function main() {
   await prisma.gitEvent.deleteMany({});
   await prisma.kanbanTask.deleteMany({});
   await prisma.repositoryAccess.deleteMany({});
+  await prisma.similarityMatch.deleteMany({});
+  await prisma.noveltyCheck.deleteMany({});
+  await prisma.archivedThesis.deleteMany({});
   await prisma.defenseInteraction.deleteMany({});
   await prisma.mockDefenseSession.deleteMany({});
   await prisma.thesisProposal.deleteMany({});
@@ -277,6 +280,133 @@ async function main() {
       githubLogin: TRACKED_REPO.split("/")[0],
     },
   });
+
+  // ---- Module 2 (Member 3): the archive the novelty checker scores against --
+  // Stands in for the University Thesis Repository (Module 3, Member 1) until
+  // that feature is built. Deliberately clustered around citation graphs, NLP,
+  // and topic modelling so the similarity engine has genuinely near-neighbour
+  // work to find rather than a set of unrelated titles that all score zero.
+  const archive: {
+    title: string;
+    abstract: string;
+    department: string;
+    year: number;
+    supervisor: string;
+    keywords: string[];
+  }[] = [
+    {
+      title: "Graph-Based Topic Modeling for Academic Search",
+      abstract:
+        "This thesis builds a graph-based topic model over academic search logs, combining citation structure with keyword co-occurrence to surface latent research themes. Topics are extracted from a citation network and ranked by centrality, improving retrieval over keyword-only baselines.",
+      department: "CSE",
+      year: 2024,
+      supervisor: "Dr. Farhana Islam",
+      keywords: ["topic modeling", "citation graph", "academic search", "information retrieval"],
+    },
+    {
+      title: "Bangla NLP Resource Survey",
+      abstract:
+        "A survey of available Bangla language resources for natural language processing, covering annotated corpora, embeddings, and benchmark tasks. The work catalogues gaps in low-resource Bangla tooling and proposes priorities for future dataset construction.",
+      department: "CSE",
+      year: 2023,
+      supervisor: "Dr. Kamal Hossain",
+      keywords: ["bangla", "low-resource", "nlp", "corpus"],
+    },
+    {
+      title: "Citation Networks in Scientometrics",
+      abstract:
+        "An analysis of citation network structure across scientometric datasets, measuring how community detection over citation graphs predicts emerging research fronts. Network embeddings are evaluated against bibliometric baselines.",
+      department: "CSE",
+      year: 2022,
+      supervisor: "Dr. Nabila Karim",
+      keywords: ["citation network", "scientometrics", "community detection", "embeddings"],
+    },
+    {
+      title: "Keyword Overlap Methods for Research Gap Detection",
+      abstract:
+        "This work detects research gaps by measuring keyword overlap between published abstracts within a field. Terms that appear rarely relative to their neighbours are proposed as candidate gaps, with a manual validation study over three CSE subfields.",
+      department: "CSE",
+      year: 2023,
+      supervisor: "Dr. Farhana Islam",
+      keywords: ["gap detection", "keyword overlap", "abstracts", "bibliometrics"],
+    },
+    {
+      title: "Transformer Embeddings for Cross-Lingual Document Retrieval",
+      abstract:
+        "Multilingual transformer embeddings are fine-tuned for cross-lingual document retrieval between English and Bangla, with contrastive training over parallel abstracts. Retrieval quality is measured on a constructed low-resource benchmark.",
+      department: "CSE",
+      year: 2024,
+      supervisor: "Dr. Imran Chowdhury",
+      keywords: ["transformers", "embeddings", "cross-lingual", "retrieval"],
+    },
+    {
+      title: "Plagiarism Detection Using Cosine Similarity on Student Submissions",
+      abstract:
+        "A duplication detection pipeline for student coursework using tf-idf vectors and cosine similarity, with thresholds calibrated against manually labelled cases. The system reports matched passages and their contributing terms to a reviewing instructor.",
+      department: "CSE",
+      year: 2022,
+      supervisor: "Dr. Shirin Akhter",
+      keywords: ["plagiarism", "cosine similarity", "tf-idf", "academic integrity"],
+    },
+    {
+      title: "Supervisor Allocation Under Capacity Constraints",
+      abstract:
+        "An optimisation approach to allocating thesis supervisors to students under expertise and capacity constraints, formulated as a bipartite matching problem and evaluated on three years of departmental allocation records.",
+      department: "CSE",
+      year: 2023,
+      supervisor: "Dr. Tanzim Rahman",
+      keywords: ["matching", "optimisation", "allocation", "scheduling"],
+    },
+    {
+      title: "Sentiment Analysis of Code-Mixed Bangla-English Social Text",
+      abstract:
+        "Sentiment classification over code-mixed Bangla-English social media text, comparing character-level models against multilingual transformers on a newly annotated dataset of user comments.",
+      department: "CSE",
+      year: 2024,
+      supervisor: "Dr. Kamal Hossain",
+      keywords: ["sentiment", "code-mixing", "bangla", "social media"],
+    },
+    {
+      title: "Knowledge Graph Construction from Scholarly Abstracts",
+      abstract:
+        "Entity and relation extraction over scholarly abstracts to construct a domain knowledge graph, with downstream evaluation on link prediction and expert finding tasks.",
+      department: "CSE",
+      year: 2022,
+      supervisor: "Dr. Nabila Karim",
+      keywords: ["knowledge graph", "relation extraction", "scholarly text"],
+    },
+    {
+      title: "Automated Question Generation for Viva Preparation",
+      abstract:
+        "A sequence-to-sequence model generates examiner-style questions from thesis text, evaluated on relevance and difficulty by a panel of faculty reviewers.",
+      department: "CSE",
+      year: 2024,
+      supervisor: "Dr. Ayesha Siddiqua",
+      keywords: ["question generation", "education", "sequence to sequence"],
+    },
+    {
+      title: "Energy-Aware Scheduling in Edge Computing Clusters",
+      abstract:
+        "A scheduling policy for edge computing clusters that trades latency against energy draw, validated in simulation across bursty workload traces.",
+      department: "EEE",
+      year: 2023,
+      supervisor: "Dr. Rezaul Karim",
+      keywords: ["edge computing", "scheduling", "energy efficiency"],
+    },
+    {
+      title: "Water Quality Prediction Using Ensemble Regression",
+      abstract:
+        "Ensemble regression models predict river water quality indices from sensor readings, with feature importance analysis identifying the dominant seasonal drivers.",
+      department: "CEE",
+      year: 2022,
+      supervisor: "Dr. Nasrin Jahan",
+      keywords: ["water quality", "regression", "ensemble", "sensors"],
+    },
+  ];
+
+  for (const thesis of archive) {
+    await prisma.archivedThesis.create({ data: thesis });
+  }
 
   console.log("=".repeat(70));
   console.log("Seed complete.");
