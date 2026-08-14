@@ -82,6 +82,14 @@ model User {
 
   // Module 2 (Member 1): Automated Evaluation & LaTeX Chart Generator
   evaluationRuns EvaluationRun[]
+
+  // Module 2 (Member 2): Git-to-Task Contribution Analytics
+  assignedTasks KanbanTask[]       @relation("TaskAssignee")
+  repoAccess    RepositoryAccess[] @relation("RepoAccess")
+
+  // Module 1 (Member 2): supervisor-approved teammate removal
+  removalRequestsMade     TeamRemovalRequest[] @relation("RemovalRequester")
+  removalRequestsAgainst  TeamRemovalRequest[] @relation("RemovalTarget")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -162,6 +170,9 @@ model SupervisorProfile {
   isAvailable       Boolean        @default(true)
   avgResponseDays   Float          @default(3)
   receivedRequests  MatchRequest[] @relation("SupervisorRequests")
+
+  // Module 1 (Member 2): teammate removals awaiting this supervisor's decision
+  removalDecisions TeamRemovalRequest[] @relation("RemovalDecisions")
 }
 
 /// Supervisor mode: a student sends a supervision request directly from the ranked list.
@@ -273,4 +284,146 @@ model DefenseInteraction {
   evaluation String?
   score      Float?
   createdAt  DateTime           @default(now())
+}
+
+/// Module 2 (Member 2): Git-to-Task Contribution Analytics.
+/// The four kanban columns. Order here is the board's left-to-right order.
+enum TaskStatus {
+  BACKLOG
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+/// Module 2 (Member 2): what arrived from GitHub — a pushed commit or a pull
+/// request action. Kept separate from TaskStatus because an event can reference
+/// no task at all and still belongs in the activity feed and the heatmap.
+enum GitEventType {
+  PUSH
+  PULL_REQUEST
+}
+
+/// Module 2 (Member 2): a card on the team kanban board.
+///
+/// `key` ("TS-11") is what a commit message references — that string is the
+/// whole contract between git and this board, so it's unique and immutable once
+/// created. Status moves either by hand or automatically when a webhook payload
+/// carries a matching reference (see GitEvent.movedTaskTo).
+model KanbanTask {
+  id         String     @id @default(uuid())
+  key        String     @unique
+  title      String
+  status     TaskStatus @default(BACKLOG)
+  repo       String
+  assigneeId String?
+  assignee   User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  /// Human-readable trace of the last automated move ("closed via commit a1c9f2"),
+  /// shown on the card so an auto-transition is never unexplained.
+  autoNote   String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  events GitEvent[]
+
+  @@index([repo, status])
+}
+
+/// Module 2 (Member 2): one row per commit pushed or pull-request action, the
+/// raw material behind the heatmap, the per-member chart, and the activity feed.
+///
+/// `externalId` ("push:<sha>", "pr:22:opened") is the idempotency key: webhook
+/// delivery and API backfill can both report the same event, and re-running a
+/// sync must not inflate anyone's commit count.
+model GitEvent {
+  id          String       @id @default(uuid())
+  externalId  String       @unique
+  type        GitEventType
+  repo        String
+  /// GitHub login of whoever authored it. Resolved to a platform user at read
+  /// time via DeveloperProfile.githubUsername rather than by foreign key, so
+  /// contributors without a ThesisSync account still appear in the analytics.
+  actorLogin  String
+  actorName   String?
+  message     String
+  sha         String?
+  prNumber    Int?
+  prState     String?
+  branch      String?
+  url         String?
+  occurredAt  DateTime
+  taskId      String?
+  task        KanbanTask?  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  /// Set only when this event actually caused a column change, so the activity
+  /// feed can distinguish "mentioned TS-11" from "moved TS-11 to Done".
+  movedTaskTo TaskStatus?
+  createdAt   DateTime     @default(now())
+
+  @@index([repo, occurredAt])
+  @@index([actorLogin, occurredAt])
+}
+
+/// Module 1 (Member 2): removing a teammate is not unilateral — a student asks,
+/// and their supervisor decides. One row per request, kept after the decision so
+/// the team's history stays auditable rather than silently rewritten.
+///
+/// Approval is what actually severs the team link: it deletes the ACCEPTED
+/// TeamInvite rows between the two students (both directions). The pair can be
+/// re-invited afterwards, which is why the invite rows are removed rather than
+/// flipped to DECLINED — a stale DECLINED row would block a fresh invite via the
+/// @@unique([fromUserId, toUserId]) constraint.
+model TeamRemovalRequest {
+  id           String            @id @default(uuid())
+  requesterId  String
+  requester    User              @relation("RemovalRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  targetId     String
+  target       User              @relation("RemovalTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  /// The supervisor whose approval is required: the requester's accepted
+  /// supervisor at the time of asking. Stored rather than derived so a later
+  /// supervision change can't silently reassign a pending decision.
+  supervisorId String
+  supervisor   SupervisorProfile @relation("RemovalDecisions", fields: [supervisorId], references: [id], onDelete: Cascade)
+  reason       String
+  status       RequestStatus     @default(PENDING)
+  /// Supervisor's note on the decision, shown back to the requester.
+  decisionNote String?
+  decidedAt    DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([supervisorId, status])
+  @@index([requesterId, status])
+}
+
+/// Module 2 (Member 2): how a user proved they may see a repository's analytics.
+enum RepoAccessRole {
+  OWNER
+  COLLABORATOR
+  CONTRIBUTOR
+}
+
+/// Module 2 (Member 2): a repository a user has connected to the analytics board.
+///
+/// This row *is* the authorization record. Every read of a repo's tasks, events,
+/// heatmap, or activity checks for one, so a user can never see analytics for a
+/// repository they have no standing on — searching for a stranger's repo returns
+/// nothing rather than someone else's contribution data.
+///
+/// Access is re-checked against GitHub when the repo is connected, and the role
+/// that proved it is kept for display. Boards themselves stay keyed by the repo
+/// full name, so teammates who each connect the same repo share one board.
+model RepositoryAccess {
+  id         String         @id @default(uuid())
+  userId     String
+  user       User           @relation("RepoAccess", fields: [userId], references: [id], onDelete: Cascade)
+  /// "owner/name", exactly as GitHub canonicalises it.
+  fullName   String
+  role       RepoAccessRole
+  /// The GitHub login the check was made against, so a later re-verification
+  /// against a different account is visibly a different claim.
+  githubLogin String
+  isPrivate  Boolean        @default(false)
+  verifiedAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+
+  @@unique([userId, fullName])
+  @@index([fullName])
 }
