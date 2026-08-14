@@ -90,6 +90,9 @@ model User {
   // Module 1 (Member 2): supervisor-approved teammate removal
   removalRequestsMade     TeamRemovalRequest[] @relation("RemovalRequester")
   removalRequestsAgainst  TeamRemovalRequest[] @relation("RemovalTarget")
+
+  // Module 2 (Member 3): Topic Novelty & Similarity Checker
+  noveltyChecks NoveltyCheck[] @relation("NoveltyChecks")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -426,4 +429,95 @@ model RepositoryAccess {
 
   @@unique([userId, fullName])
   @@index([fullName])
+}
+
+/// Module 2 (Member 3): how risky a similarity result is, banded so the UI and
+/// the supervisor-attention rule agree on one threshold rather than each
+/// hard-coding their own.
+enum SimilarityRisk {
+  LOW
+  MODERATE
+  HIGH
+}
+
+/// Module 2 (Member 3): what the novelty checker was asked to score.
+enum NoveltyCheckKind {
+  TITLE_ABSTRACT
+  CHAPTER_DRAFT
+}
+
+/// Module 3 (Member 1): the University Thesis Repository's corpus.
+///
+/// Added here because the Topic Novelty & Similarity Checker is scored against
+/// it — the spec has the repository powering the similarity feature, so the
+/// corpus has to exist before the checker means anything. The repository's own
+/// search UI is still Module 3's to build; this is only the archive it reads.
+model ArchivedThesis {
+  id         String   @id @default(uuid())
+  title      String
+  abstract   String
+  /// Full text when the archive holds it. Similarity scores against abstract +
+  /// content, so a thesis with content stored is matched on far more signal.
+  content    String?
+  department String
+  year       Int
+  supervisor String?
+  keywords   String[] @default([])
+  createdAt  DateTime @default(now())
+
+  matches SimilarityMatch[]
+
+  @@index([department, year])
+}
+
+/// Module 2 (Member 3): one run of the checker, kept so a student can see what
+/// they submitted before and a supervisor can review the trail.
+model NoveltyCheck {
+  id     String           @id @default(uuid())
+  userId String
+  user   User             @relation("NoveltyChecks", fields: [userId], references: [id], onDelete: Cascade)
+  kind   NoveltyCheckKind
+
+  /// Title/abstract runs carry both; draft runs carry the source file name.
+  title      String?
+  abstract   String?
+  sourceName String?
+  /// Word count of what was actually scored, so a near-empty upload is visible
+  /// rather than silently producing a flattering score.
+  wordCount  Int    @default(0)
+
+  /// 0-100, higher is more novel. Title/abstract runs only.
+  noveltyScore   Int?
+  /// 0-100 highest cosine similarity found against the archive.
+  topSimilarity  Int            @default(0)
+  risk           SimilarityRisk @default(LOW)
+  /// Angles the corpus barely covers, and methodologies it already covers.
+  understudied   String[]       @default([])
+  alreadyCovered String[]       @default([])
+  /// How many archived theses and external papers this was scored against, so
+  /// the number shown to the student is the real corpus size at run time.
+  archiveSize    Int            @default(0)
+  externalSize   Int            @default(0)
+
+  createdAt DateTime @default(now())
+
+  matches SimilarityMatch[]
+
+  @@index([userId, createdAt])
+}
+
+/// Module 2 (Member 3): a single archived thesis a run matched against.
+model SimilarityMatch {
+  id       String       @id @default(uuid())
+  checkId  String
+  check    NoveltyCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  thesisId String
+  thesis   ArchivedThesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
+  /// 0-100 cosine similarity.
+  score    Int
+  /// The terms that drove the overlap, so a flagged match can be explained
+  /// rather than just asserted.
+  sharedTerms String[] @default([])
+
+  @@unique([checkId, thesisId])
 }
