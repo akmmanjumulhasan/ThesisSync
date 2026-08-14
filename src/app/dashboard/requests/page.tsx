@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { RequestActions } from "@/components/matchmaking/RequestActions";
+import { RemovalDecisions } from "@/components/matchmaking/RemovalDecisions";
 
 export default async function RequestsPage() {
   const session = await getSession();
@@ -24,11 +25,21 @@ export default async function RequestsPage() {
     );
   }
 
-  const requests = await prisma.matchRequest.findMany({
-    where: { supervisorId: supervisorProfile.id },
-    include: { student: { select: { name: true, email: true, department: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [requests, removals] = await Promise.all([
+    prisma.matchRequest.findMany({
+      where: { supervisorId: supervisorProfile.id },
+      include: { student: { select: { name: true, email: true, department: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.teamRemovalRequest.findMany({
+      where: { supervisorId: supervisorProfile.id },
+      include: {
+        requester: { select: { name: true, email: true } },
+        target: { select: { name: true, email: true } },
+      },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    }),
+  ]);
 
   return (
     <div>
@@ -54,6 +65,30 @@ export default async function RequestsPage() {
             <RequestActions requestId={r.id} status={r.status} />
           </div>
         ))}
+      </div>
+
+      {/* Teammate removals: a student can't drop a teammate without this approval. */}
+      <div className="mt-10">
+        <h2 className="text-lg font-bold text-foreground">Teammate removal requests</h2>
+        <p className="mt-1 text-sm text-muted">
+          {removals.filter((r) => r.status === "PENDING").length} awaiting your decision
+        </p>
+        <div className="mt-4">
+          <RemovalDecisions
+            initialRequests={removals.map((r) => ({
+              id: r.id,
+              requesterName: r.requester.name,
+              requesterEmail: r.requester.email,
+              targetName: r.target.name,
+              targetEmail: r.target.email,
+              reason: r.reason,
+              status: r.status,
+              decisionNote: r.decisionNote,
+              createdAt: r.createdAt.toISOString(),
+              decidedAt: r.decidedAt?.toISOString() ?? null,
+            }))}
+          />
+        </div>
       </div>
     </div>
   );
