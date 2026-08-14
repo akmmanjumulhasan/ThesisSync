@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient, Role, TaskStatus, RepoAccessRole } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -8,10 +8,17 @@ const prisma = new PrismaClient({ adapter });
 
 const DEMO_PASSWORD = "Passw0rd!123";
 
+// Kept as a literal rather than imported from src/services: that module is
+// "server-only" and would fail to load under tsx. Mirrors GIT_ANALYTICS_REPO.
+const TRACKED_REPO = process.env.GIT_ANALYTICS_REPO ?? "akmmanjumulhasan/ThesisSync";
+
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
   // Reset in FK-safe order.
+  await prisma.gitEvent.deleteMany({});
+  await prisma.kanbanTask.deleteMany({});
+  await prisma.repositoryAccess.deleteMany({});
   await prisma.defenseInteraction.deleteMany({});
   await prisma.mockDefenseSession.deleteMany({});
   await prisma.thesisProposal.deleteMany({});
@@ -238,6 +245,38 @@ async function main() {
       },
     });
   }
+
+  // ---- Module 2 (Member 2): Git-to-Task kanban board -----------------------
+  // Starting cards only. Their columns are meant to move from real commits —
+  // a message like "fixes TS-11" is what drives them — so nothing here is
+  // pre-marked done by hand.
+  const boardTasks: { key: string; title: string; status: TaskStatus }[] = [
+    { key: "TS-05", title: "Data collection pipeline", status: TaskStatus.DONE },
+    { key: "TS-07", title: "Baseline TF-IDF model", status: TaskStatus.DONE },
+    { key: "TS-09", title: "Evaluation script (confusion matrix)", status: TaskStatus.IN_REVIEW },
+    { key: "TS-11", title: "Build citation-graph embedding model", status: TaskStatus.IN_PROGRESS },
+    { key: "TS-14", title: "Write related-work section", status: TaskStatus.BACKLOG },
+    { key: "TS-15", title: "Draft ethics statement", status: TaskStatus.BACKLOG },
+  ];
+
+  for (const task of boardTasks) {
+    await prisma.kanbanTask.create({
+      data: { ...task, repo: TRACKED_REPO, assigneeId: you.id },
+    });
+  }
+
+  // Demo access to the board above. In the running app this row is only ever
+  // created by POST /api/git/repos, which checks against GitHub that the user
+  // owns, collaborates on, or has contributed to the repository — seeding it
+  // directly just saves the demo account that round trip.
+  await prisma.repositoryAccess.create({
+    data: {
+      userId: you.id,
+      fullName: TRACKED_REPO,
+      role: RepoAccessRole.OWNER,
+      githubLogin: TRACKED_REPO.split("/")[0],
+    },
+  });
 
   console.log("=".repeat(70));
   console.log("Seed complete.");

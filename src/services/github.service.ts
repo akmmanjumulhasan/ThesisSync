@@ -32,6 +32,40 @@ export interface GitHubVerificationResult {
   totalCommits: number;
 }
 
+/** Module 2 (Member 2): the subset of GitHub's commit shape the analytics read. */
+export interface GitHubCommit {
+  sha: string;
+  html_url: string;
+  commit: {
+    message: string;
+    author: { name: string | null; email: string | null; date: string } | null;
+  };
+  /** Null when the commit author has no linked GitHub account. */
+  author: { login: string } | null;
+}
+
+/** Module 2 (Member 2): the subset of GitHub's repository shape access checks read. */
+export interface GitHubRepoDetail {
+  full_name: string;
+  private: boolean;
+  owner: { login: string; type: string };
+  /** Present only when the token is authenticated as someone with access. */
+  permissions?: { admin: boolean; maintain?: boolean; push: boolean; triage?: boolean; pull: boolean };
+}
+
+/** Module 2 (Member 2): the subset of GitHub's pull-request shape the analytics read. */
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  merged_at: string | null;
+  user: { login: string } | null;
+  head: { ref: string } | null;
+}
+
 export class GitHubService {
   static async fetchProfile(username: string): Promise<{ login: string }> {
     const res = await fetch(`${GITHUB_API}/users/${encodeURIComponent(username)}`, {
@@ -98,6 +132,85 @@ export class GitHubService {
     );
 
     return counts.reduce((sum, c) => sum + c, 0);
+  }
+
+  /**
+   * Module 2 (Member 2): a single repository, or null when it doesn't exist or
+   * isn't visible to this token. Null is deliberately indistinguishable between
+   * "no such repo" and "private repo we can't see" — GitHub itself 404s private
+   * repos for the same reason, and echoing that avoids confirming a private
+   * repo's existence to someone who can't read it.
+   */
+  static async fetchRepo(fullName: string): Promise<GitHubRepoDetail | null> {
+    const res = await fetch(`${GITHUB_API}/repos/${fullName}`, { headers: authHeaders() });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new Error(`Failed to look up "${fullName}" (status ${res.status})`);
+    }
+    return res.json();
+  }
+
+  /**
+   * Module 2 (Member 2): is `username` a collaborator on `fullName`?
+   *
+   * GitHub answers 204 yes / 404 no, but only for a token that itself has push
+   * access to the repo. With a read-only token this returns 403, which is
+   * genuinely "unknown", not "no" — hence three states rather than a boolean, so
+   * the caller can fall back to the public contributor list instead of wrongly
+   * denying access.
+   */
+  static async checkCollaborator(
+    fullName: string,
+    username: string
+  ): Promise<"yes" | "no" | "unknown"> {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${fullName}/collaborators/${encodeURIComponent(username)}`,
+      { headers: authHeaders() }
+    );
+    if (res.status === 204) return "yes";
+    if (res.status === 404) return "no";
+    return "unknown";
+  }
+
+  /** Module 2 (Member 2): public contributor logins for a repo. */
+  static async fetchContributorLogins(fullName: string, perPage = 100): Promise<string[]> {
+    const res = await fetch(`${GITHUB_API}/repos/${fullName}/contributors?per_page=${perPage}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data)
+      ? data.map((c: { login?: string }) => c.login).filter((l): l is string => Boolean(l))
+      : [];
+  }
+
+  /**
+   * Module 2 (Member 2): recent commits on a repo, used to backfill the
+   * contribution analytics so the board has real history before any webhook has
+   * ever fired. `since` keeps the payload to the heatmap window rather than the
+   * repo's entire life.
+   */
+  static async fetchRepoCommits(repo: string, since: Date, perPage = 100): Promise<GitHubCommit[]> {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${repo}/commits?since=${since.toISOString()}&per_page=${perPage}`,
+      { headers: authHeaders() }
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to fetch commits for "${repo}" (status ${res.status})`);
+    }
+    return res.json();
+  }
+
+  /** Module 2 (Member 2): recent pull requests, any state, newest first. */
+  static async fetchRepoPullRequests(repo: string, perPage = 30): Promise<GitHubPullRequest[]> {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${repo}/pulls?state=all&sort=updated&direction=desc&per_page=${perPage}`,
+      { headers: authHeaders() }
+    );
+    if (!res.ok) {
+      throw new Error(`Failed to fetch pull requests for "${repo}" (status ${res.status})`);
+    }
+    return res.json();
   }
 
   /** Full verification pipeline used by POST /api/github/verify. Throws if the username doesn't exist. */

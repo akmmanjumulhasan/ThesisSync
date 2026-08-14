@@ -128,8 +128,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "Git-to-Task Contribution Analytics",
         description: "A kanban board that updates itself from GitHub commits and pull requests.",
         icon: GitBranchIcon,
-        status: "planned",
+        status: "live",
         owner: "Member 2 · You",
+        liveHref: "/dashboard/contribution",
       },
       {
         title: "Topic Novelty & Similarity Checker",
