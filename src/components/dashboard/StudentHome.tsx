@@ -40,9 +40,13 @@ export async function StudentHome({ session }: { session: SessionPayload }) {
   const pendingRequests = matchRequests.filter((r) => r.status === "PENDING");
   const latestRequest = matchRequests[0];
 
-  const acceptedTeammateCount =
-    sentInvites.filter((i) => i.status === "ACCEPTED").length +
-    receivedInvites.filter((i) => i.status === "ACCEPTED").length;
+  // One teammate, counted once: a pair can hold an accepted invite in both
+  // directions (the unique constraint is per-direction), so these are deduped by
+  // person rather than summed. Matches /api/match/team's roster.
+  const acceptedTeammateCount = new Set([
+    ...sentInvites.filter((i) => i.status === "ACCEPTED").map((i) => i.toUserId),
+    ...receivedInvites.filter((i) => i.status === "ACCEPTED").map((i) => i.fromUserId),
+  ]).size;
 
   const keywordCount = (studentProfile?.researchKeywords.length ?? 0) + (studentProfile?.declaredSkills.length ?? 0);
 
