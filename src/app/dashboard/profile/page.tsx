@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { GithubVerifyForm } from "@/components/matchmaking/GithubVerifyForm";
 import { ChangePasswordForm } from "@/components/profile/ChangePasswordForm";
+import { UpdateNameForm } from "@/components/profile/UpdateNameForm";
 import {
   UserIcon,
   MailIcon,
@@ -80,6 +81,15 @@ export default async function ProfilePage() {
             </div>
           ))}
         </dl>
+      </div>
+
+      {/* Update name */}
+      <div className="mt-6 rounded-lg border border-border bg-surface p-6">
+        <h2 className="font-semibold text-foreground">Display name</h2>
+        <p className="mt-1 text-sm text-muted">
+          This is the name teammates and supervisors see on match results, invites, and your proposal.
+        </p>
+        <UpdateNameForm initialName={user.name} />
       </div>
 
       {/* GitHub verification: students only */}
