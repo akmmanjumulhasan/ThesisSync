@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { TaskStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { normalizeRepoName, requireRepoAccess } from "@/services/repo-access.service";
+import { canReadRepo, normalizeRepoName, requireRepoAccess } from "@/services/repo-access.service";
 
 /**
  * Module 2 (Member 2): Git-to-Task Contribution Analytics — the kanban board's
@@ -13,12 +13,26 @@ import { normalizeRepoName, requireRepoAccess } from "@/services/repo-access.ser
  * access to, so one team's board is never readable or editable by another.
  */
 
-/** Shared gate: resolves the repo argument and refuses without proven access. */
-async function repoFor(userId: string, raw: string | null) {
+/**
+ * Shared gate. `mode` decides how much standing is required: reading a board is
+ * open to the supervisor of a student who connected it, while creating or
+ * moving a card stays with the people actually doing the work.
+ */
+async function repoFor(
+  userId: string,
+  role: string,
+  raw: string | null,
+  mode: "read" | "write" = "write"
+) {
   const repo = normalizeRepoName(raw ?? "");
   if (!repo) return { error: "A repo is required.", status: 400 as const, repo: null };
-  const access = await requireRepoAccess(userId, repo);
-  if (!access) return { error: "You don't have access to that repository.", status: 403 as const, repo: null };
+
+  const allowed =
+    mode === "read" ? await canReadRepo(userId, role, repo) : Boolean(await requireRepoAccess(userId, repo));
+
+  if (!allowed) {
+    return { error: "You don't have access to that repository.", status: 403 as const, repo: null };
+  }
   return { error: null, status: 200 as const, repo };
 }
 
@@ -31,7 +45,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "You must be signed in." }, { status: 401 });
   }
 
-  const gate = await repoFor(session.sub, new URL(req.url).searchParams.get("repo"));
+  const gate = await repoFor(session.sub, session.role, new URL(req.url).searchParams.get("repo"), "read");
   if (!gate.repo) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
   const tasks = await prisma.kanbanTask.findMany({
@@ -71,7 +85,7 @@ export async function POST(req: Request) {
   }
 
   const { title, status, repo: repoInput } = await req.json();
-  const gate = await repoFor(session.sub, typeof repoInput === "string" ? repoInput : null);
+  const gate = await repoFor(session.sub, session.role, typeof repoInput === "string" ? repoInput : null);
   if (!gate.repo) return NextResponse.json({ error: gate.error }, { status: gate.status });
 
   if (typeof title !== "string" || !title.trim()) {

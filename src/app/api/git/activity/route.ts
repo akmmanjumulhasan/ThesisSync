@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { buildHeatmap, summarizeByMember } from "@/lib/git-analytics";
 import { resolveMemberNames } from "@/services/git-analytics.service";
-import { normalizeRepoName, requireRepoAccess } from "@/services/repo-access.service";
+import { canReadRepo, normalizeRepoName } from "@/services/repo-access.service";
 
 /**
  * Module 2 (Member 2): Git-to-Task Contribution Analytics — the read model
@@ -24,8 +24,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "A repo parameter is required." }, { status: 400 });
   }
 
-  const access = await requireRepoAccess(session.sub, repo);
-  if (!access) {
+  // Supervisors read their own students' boards; nobody reads anyone else's.
+  if (!(await canReadRepo(session.sub, session.role, repo))) {
     return NextResponse.json({ error: "You don't have access to that repository." }, { status: 403 });
   }
 
