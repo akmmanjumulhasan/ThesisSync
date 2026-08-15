@@ -134,3 +134,90 @@ export async function listAccessibleRepos(userId: string) {
     orderBy: { createdAt: "desc" },
   });
 }
+
+/** The students whose supervision request this supervisor has accepted. */
+export async function supervisedStudentIds(supervisorUserId: string): Promise<string[]> {
+  const profile = await prisma.supervisorProfile.findUnique({
+    where: { userId: supervisorUserId },
+    select: { id: true },
+  });
+  if (!profile) return [];
+
+  const accepted = await prisma.matchRequest.findMany({
+    where: { supervisorId: profile.id, status: "ACCEPTED" },
+    select: { studentId: true },
+  });
+  return accepted.map((r) => r.studentId);
+}
+
+/**
+ * Read access for a supervisor: only repositories their own students connected.
+ *
+ * Supervision is the entire basis of the claim, so it is checked per request
+ * rather than granting supervisors a blanket role permission. A supervisor with
+ * no accepted students can see no boards at all, and never another supervisor's
+ * students' work.
+ */
+export async function canReadRepoAsSupervisor(
+  supervisorUserId: string,
+  fullName: string
+): Promise<boolean> {
+  const studentIds = await supervisedStudentIds(supervisorUserId);
+  if (studentIds.length === 0) return false;
+
+  const shared = await prisma.repositoryAccess.findFirst({
+    where: { fullName, userId: { in: studentIds } },
+    select: { id: true },
+  });
+  return shared !== null;
+}
+
+/**
+ * The one read gate. A user may read a repository's analytics if they connected
+ * it themselves, or if they supervise a student who did.
+ *
+ * Writes deliberately do not go through this: a supervisor watching a board
+ * should not be able to move its cards or trigger a sync on it.
+ */
+export async function canReadRepo(
+  userId: string,
+  role: string,
+  fullName: string
+): Promise<boolean> {
+  if (await requireRepoAccess(userId, fullName)) return true;
+  if (role === "SUPERVISOR") return canReadRepoAsSupervisor(userId, fullName);
+  return false;
+}
+
+export interface SupervisedStudentSummary {
+  userId: string;
+  name: string;
+  email: string;
+  repos: { fullName: string; role: string }[];
+}
+
+/** Each supervised student with the repositories they have connected. */
+export async function supervisedStudentsWithRepos(
+  supervisorUserId: string
+): Promise<SupervisedStudentSummary[]> {
+  const studentIds = await supervisedStudentIds(supervisorUserId);
+  if (studentIds.length === 0) return [];
+
+  const students = await prisma.user.findMany({
+    where: { id: { in: studentIds } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      repoAccess: { select: { fullName: true, role: true }, orderBy: { createdAt: "desc" } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return students.map((s) => ({
+    userId: s.id,
+    name: s.name,
+    email: s.email,
+    repos: s.repoAccess.map((r) => ({ fullName: r.fullName, role: r.role })),
+  }));
+}
