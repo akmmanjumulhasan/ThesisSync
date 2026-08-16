@@ -19,6 +19,9 @@ async function main() {
   await prisma.gitEvent.deleteMany({});
   await prisma.kanbanTask.deleteMany({});
   await prisma.repositoryAccess.deleteMany({});
+  await prisma.similarityMatch.deleteMany({});
+  await prisma.noveltyCheck.deleteMany({});
+  await prisma.archivedThesis.deleteMany({});
   await prisma.defenseInteraction.deleteMany({});
   await prisma.mockDefenseSession.deleteMany({});
   await prisma.thesisProposal.deleteMany({});
@@ -277,6 +280,15 @@ async function main() {
       githubLogin: TRACKED_REPO.split("/")[0],
     },
   });
+
+  // ---- Module 2 (Member 3): the novelty checker's archive ------------------
+  // Deliberately left empty. Inventing thesis titles here would make the
+  // similarity checker report confident percentages against work that does not
+  // exist, which is worse than reporting nothing. The archive is populated from
+  // real records instead — POST /api/novelty/archive imports actual
+  // dissertations from OpenAlex with their DOIs — and will hold the
+  // university's own deposited theses once Module 3 (Member 1) ships the
+  // repository.
 
   console.log("=".repeat(70));
   console.log("Seed complete.");
