@@ -93,6 +93,10 @@ model User {
 
   // Module 2 (Member 3): Topic Novelty & Similarity Checker
   noveltyChecks NoveltyCheck[] @relation("NoveltyChecks")
+
+  // Module 3 (Member 1): Version Control & Inline Annotation
+  thesisChapters ThesisChapter[] @relation("ChapterStudent")
+  draftComments  DraftComment[]  @relation("DraftCommentAuthor")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -573,4 +577,62 @@ model LiteratureCache {
   fetchedAt DateTime @default(now())
 
   @@index([fetchedAt])
+}
+
+/// Module 3 (Member 1): Version Control & Inline Annotation (API: LanguageTool).
+/// A chapter is a named unit of thesis writing a student maintains across many
+/// saved, immutable versions.
+model ThesisChapter {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation("ChapterStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions DraftVersion[]
+
+  @@unique([studentId, title])
+  @@index([studentId])
+}
+
+/// One timestamped snapshot of a chapter's content. versionNumber is 1-based
+/// and increments per chapter; diffs between any two versions are computed on
+/// demand (see src/lib/diff.ts) rather than stored.
+model DraftVersion {
+  id            String        @id @default(uuid())
+  chapterId     String
+  chapter       ThesisChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  content       String
+  wordCount     Int
+  /// LanguageToolService.check() result cached at save time so it isn't
+  /// re-fetched on every view: { issues: [{ message, shortMessage, offset,
+  /// length, ruleId, category, replacements }] }. Null means the check
+  /// couldn't be completed (external API unreachable), not "no issues found".
+  writingCheck  Json?
+  createdAt     DateTime      @default(now())
+
+  comments DraftComment[]
+
+  @@unique([chapterId, versionNumber])
+  @@index([chapterId, createdAt])
+}
+
+/// A supervisor's (or student's own) inline comment anchored to a character
+/// range within one version's content.
+model DraftComment {
+  id          String       @id @default(uuid())
+  versionId   String
+  version     DraftVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User         @relation("DraftCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  startOffset Int
+  endOffset   Int
+  quotedText  String
+  body        String
+  resolved    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  @@index([versionId])
 }
