@@ -25,7 +25,8 @@ const SUPERVISOR_NAV: NavGroup[] = [
       { number: 1, title: "Supervision requests", href: "/dashboard/requests" },
       { number: 2, title: "Proposals to review", href: "/dashboard/proposal-reviews" },
       { number: 3, title: "Contribution analytics", href: "/dashboard/contribution" },
-      { number: 4, title: "Profile", href: "/dashboard/profile" },
+      { number: 4, title: "Thesis repository", href: "/dashboard/repository" },
+      { number: 5, title: "Profile", href: "/dashboard/profile" },
     ],
   },
 ];
