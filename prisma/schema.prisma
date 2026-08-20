@@ -12,6 +12,14 @@ enum Role {
   ADMIN
 }
 
+/// Common workflow: Admin role & access management.
+enum AdminAction {
+  ROLE_CHANGED
+  ACTIVATED
+  DEACTIVATED
+  PASSWORD_RESET
+}
+
 enum RequestStatus {
   PENDING
   ACCEPTED
@@ -60,6 +68,10 @@ model User {
   studentId    String?  @unique // student ID or faculty ID, per the registration form
   department   String?
   role         Role     @default(STUDENT)
+  /// Common workflow: Admin role & access management. A deactivated account is
+  /// refused at login (existing sessions run out on their own, within 7 days —
+  /// deactivation is not an instant kill switch on a session already issued).
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   // Module 1 (Member 1): Research Landscape & Trend Analyzer
@@ -93,6 +105,29 @@ model User {
 
   // Module 2 (Member 3): Topic Novelty & Similarity Checker
   noveltyChecks NoveltyCheck[] @relation("NoveltyChecks")
+
+  // Common workflow: Admin role & access management
+  adminActionsTaken    AdminAuditLog[] @relation("AuditActor")
+  adminActionsReceived AdminAuditLog[] @relation("AuditTarget")
+}
+
+/// Common workflow: Admin role & access management.
+/// One row per action an admin takes on another account, so a role change or
+/// deactivation is always traceable to who did it and when — the absence of
+/// this is what makes "access management" a liability rather than a feature.
+model AdminAuditLog {
+  id        String      @id @default(uuid())
+  actorId   String
+  actor     User        @relation("AuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    User        @relation("AuditTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  action    AdminAction
+  /// Human-readable detail, e.g. "STUDENT -> SUPERVISOR" or "issued a temporary password".
+  detail    String
+  createdAt DateTime    @default(now())
+
+  @@index([targetId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
