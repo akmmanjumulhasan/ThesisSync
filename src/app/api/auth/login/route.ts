@@ -19,6 +19,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }
 
+    if (!user.isActive) {
+      return NextResponse.json(
+        { error: "This account has been deactivated. Contact an administrator." },
+        { status: 403 }
+      );
+    }
+
     const token = await createSessionToken({
       sub: user.id,
       email: user.email,
