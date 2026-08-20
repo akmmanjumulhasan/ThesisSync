@@ -165,8 +165,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "AI Mock Defense Simulator",
         description: "Practice your viva against an AI examiner that asks challenging, context-aware questions.",
         icon: ChatIcon,
-        status: "planned",
+        status: "live",
         owner: "Member 2 · You",
+        liveHref: "/dashboard/defense",
       },
       {
         title: "IEEE Conference Paper Transpiler",
