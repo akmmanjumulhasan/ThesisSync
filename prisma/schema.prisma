@@ -274,19 +274,36 @@ model MockDefenseSession {
   proposal     ThesisProposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   isActive     Boolean              @default(true)
   overallScore Float?
+  /// The examiner's reading of the thesis, produced before any question is
+  /// written. Kept so a session's questions can be traced back to the weakness
+  /// that motivated them rather than appearing arbitrary.
+  analysis     String?
   interactions DefenseInteraction[]
   createdAt    DateTime             @default(now())
 }
 
+/// Module 3 (Member 2): one question in a mock defense, and how it went.
 model DefenseInteraction {
-  id         String             @id @default(uuid())
-  sessionId  String
-  session    MockDefenseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question   String
-  answer     String?
-  evaluation String?
-  score      Float?
-  createdAt  DateTime           @default(now())
+  id              String             @id @default(uuid())
+  sessionId       String
+  session         MockDefenseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question        String
+  /// What the student replied. Null until they answer.
+  answer          String?
+  evaluation      String?
+  score           Float?
+  /// The answer the thesis itself supports, written when the question was, so
+  /// a student can compare their reply against what their own work already
+  /// says instead of guessing what the examiner wanted.
+  referenceAnswer String?
+  /// Which mandated area this probes: LIMITATIONS, DATA_VALIDATION, ETHICS or
+  /// METHODOLOGY. Stored so a session can be shown to cover all four.
+  focus           String?
+  /// Ask order. Questions are written in one batch, so createdAt ties.
+  position        Int                @default(0)
+  createdAt       DateTime           @default(now())
+
+  @@index([sessionId, position])
 }
 
 /// Module 2 (Member 2): Git-to-Task Contribution Analytics.
