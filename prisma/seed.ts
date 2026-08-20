@@ -76,6 +76,19 @@ async function main() {
     },
   });
 
+  // ---- Common workflow: Admin role & access management -----------------------
+  // The only account with Role.ADMIN this seed creates. Signup can never
+  // produce one (see /api/auth/signup) — every other admin has to be promoted
+  // from here, via /dashboard/admin.
+  await prisma.user.create({
+    data: {
+      name: "ThesisSync Admin",
+      email: "admin@thesissync.edu",
+      role: Role.ADMIN,
+      passwordHash,
+    },
+  });
+
   // ---- Supervisors for Supervisor-mode matching ------------------------------
   const supervisorSeeds: {
     name: string;
@@ -294,6 +307,7 @@ async function main() {
   console.log("Seed complete.");
   console.log(`Demo login for everyone: password = "${DEMO_PASSWORD}"`);
   console.log(`Your account: ${you.email}`);
+  console.log(`Admin account: admin@thesissync.edu`);
   console.log("=".repeat(70));
 }
 
