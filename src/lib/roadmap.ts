@@ -172,8 +172,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "IEEE Conference Paper Transpiler",
         description: "Renders an approved thesis straight into a print-ready, two-column IEEE paper.",
         icon: LayersIcon,
-        status: "planned",
+        status: "live",
         owner: "Member 2 · You",
+        liveHref: "/dashboard/paper",
       },
       {
         title: "Chapter Approval Workflow",
