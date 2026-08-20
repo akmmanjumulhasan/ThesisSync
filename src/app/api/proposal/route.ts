@@ -58,6 +58,11 @@ export async function POST(req: Request) {
     const value = typeof body[key] === "string" ? body[key].trim().slice(0, 4000) : "";
     fields[key] = value;
   }
+  // title/abstract feed the University Thesis Repository (Module 3, Member 1)
+  // once this proposal is approved — not part of CORE_FIELDS since they
+  // predate this feature and are validated/capped separately here.
+  const title = typeof body.title === "string" ? body.title.trim().slice(0, 300) : "";
+  const abstract = typeof body.abstract === "string" ? body.abstract.trim().slice(0, 4000) : "";
 
   const dois: string[] = Array.isArray(body.dois)
     ? [...new Set(body.dois.map((d: unknown) => (typeof d === "string" ? d.trim() : "")).filter(Boolean) as string[])]
@@ -73,9 +78,12 @@ export async function POST(req: Request) {
   }
 
   if (submit) {
-    if (CORE_FIELDS.some((key) => !fields[key])) {
+    if (CORE_FIELDS.some((key) => !fields[key]) || !title || !abstract) {
       return NextResponse.json(
-        { error: "Problem statement, research objectives, methodology outline, and expected contribution are all required to submit." },
+        {
+          error:
+            "Title, abstract, problem statement, research objectives, methodology outline, and expected contribution are all required to submit.",
+        },
         { status: 400 }
       );
     }
@@ -107,6 +115,8 @@ export async function POST(req: Request) {
       where: { studentId: session.sub },
       update: {
         ...fields,
+        title,
+        abstract,
         status: submit ? ProposalStatus.SUBMITTED : (existing?.status ?? ProposalStatus.DRAFT),
         version: nextVersion,
         submittedAt: submit ? new Date() : existing?.submittedAt,
@@ -114,6 +124,8 @@ export async function POST(req: Request) {
       create: {
         studentId: session.sub,
         ...fields,
+        title,
+        abstract,
         status: submit ? ProposalStatus.SUBMITTED : ProposalStatus.DRAFT,
         version: 1,
         submittedAt: submit ? new Date() : null,

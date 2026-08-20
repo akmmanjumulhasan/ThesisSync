@@ -28,6 +28,8 @@ interface HistoryRow {
 
 export interface ProposalData {
   id: string;
+  title: string;
+  abstract: string;
   problemStatement: string;
   researchObjectives: string;
   methodologyOutline: string;
@@ -69,6 +71,8 @@ export function ProposalBuilderClient({
   supervisorName: string | null;
   initialProposal: ProposalData | null;
 }) {
+  const [title, setTitle] = useState(initialProposal?.title ?? "");
+  const [abstract, setAbstract] = useState(initialProposal?.abstract ?? "");
   const [problemStatement, setProblemStatement] = useState(initialProposal?.problemStatement ?? "");
   const [methodologyOutline, setMethodologyOutline] = useState(initialProposal?.methodologyOutline ?? "");
   const [researchObjectives, setResearchObjectives] = useState(initialProposal?.researchObjectives ?? "");
@@ -108,6 +112,8 @@ export function ProposalBuilderClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title,
+          abstract,
           problemStatement,
           researchObjectives,
           methodologyOutline,
@@ -183,6 +189,25 @@ export function ProposalBuilderClient({
           <p className="text-xs text-muted">Your proposal will be reviewed by {supervisorName}.</p>
         )}
         {error && <p className="text-sm text-danger-foreground">{error}</p>}
+
+        {/* Title + Abstract — feed the University Thesis Repository once approved */}
+        <div className="rounded-lg border border-border bg-surface p-5">
+          <label className="mb-2 block text-sm font-medium text-muted">Thesis title</label>
+          <input
+            value={title}
+            disabled={locked}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="A concise, descriptive title for the finished thesis"
+            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-accent disabled:opacity-70"
+          />
+        </div>
+        <Field
+          label="Abstract"
+          value={abstract}
+          onChange={setAbstract}
+          disabled={locked}
+          placeholder="A short summary of the problem, approach, and expected contribution."
+        />
 
         {/* Problem statement + Methodology outline */}
         <div className="grid gap-4 sm:grid-cols-2">
