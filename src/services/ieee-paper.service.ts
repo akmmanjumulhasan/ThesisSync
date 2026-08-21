@@ -13,28 +13,44 @@ import {
 /**
  * Module 3 (Member 2): IEEE Conference Paper Transpiler.
  *
- * An approved proposal is the gate: the transpiler refuses to typeset for a
- * student whose supervisor has not signed off. What it does *not* do is inherit
- * that proposal's prose. Everything on the page — title, abstract, every
- * section, the byline, the references — is written by the student here, and the
- * page starts empty so nothing is carried in that they did not choose to put
- * there. Authorship order in particular is a decision about credit that no
- * schema can infer.
+ * The paper's body comes from the student's **locked chapters**, not from their
+ * proposal.
+ *
+ * That distinction is the whole point of this module. A proposal is written
+ * before the work exists: it states what the student intends to do, and has no
+ * results in it because there are none yet. A conference paper reports what was
+ * done and what was found. Sourcing the body from the proposal produced a
+ * typeset proposal wearing a paper's clothes — the giveaway being that the old
+ * fixed section plan had no Results section at all, because there was nothing to
+ * put in one.
+ *
+ * Locked chapters are the right source because locking is the point at which a
+ * chapter is committed to the final thesis (see the Chapter Approval Workflow,
+ * Module 3 Member 3). Approved-but-unlocked chapters are deliberately excluded:
+ * an approved chapter can still be reopened and rewritten, which would let the
+ * paper drift away from the text it claims to transpile.
+ *
+ * The proposal is still the approval gate, and still supplies the title and
+ * abstract — the two fields it legitimately owns, since the student wrote them
+ * as the work's identity rather than as a plan for it.
+ *
+ * The page starts empty regardless. Nothing is carried in that the student did
+ * not ask for, and authorship order in particular is a decision about credit
+ * that no schema can infer.
  *
  * Nothing is persisted. A paper is a pure function of its inputs, so storing a
  * copy would only create a second version to keep in sync with the first.
  */
 
-/** Section order in the emitted paper, and the key each one is submitted under. */
-const SECTION_PLAN = [
-  { heading: "Introduction", field: "problemStatement" },
-  { heading: "Research Objectives", field: "researchObjectives" },
-  { heading: "Methodology", field: "methodologyOutline" },
-  { heading: "Expected Contribution", field: "expectedContribution" },
-  { heading: "Limitations and Future Work", field: "limitations" },
-] as const;
-
-export type SectionField = (typeof SECTION_PLAN)[number]["field"];
+/**
+ * A section is submitted under its chapter's id.
+ *
+ * Chapter titles are free text, so there is no fixed plan to map them onto —
+ * and guessing which chapter is "the methodology one" would be wrong exactly
+ * when a student structures their thesis unusually. Each locked chapter becomes
+ * one section, in thesis order, under its own title.
+ */
+export type SectionField = string;
 
 /** One section's box on the page. */
 export interface PaperSectionField {
@@ -48,7 +64,7 @@ const BULLET = /^\s*(?:[-*•·]|\(?\d+[.)]|[a-z][.)])\s+/i;
 const SUBHEADING = /^\s*##\s+(.+?)\s*$/;
 
 export interface PaperBlocker {
-  code: "NO_PROPOSAL" | "NOT_APPROVED" | "NO_TITLE" | "NO_ABSTRACT" | "NO_BODY";
+  code: "NO_PROPOSAL" | "NOT_APPROVED" | "NO_LOCKED_CHAPTERS" | "NO_TITLE" | "NO_ABSTRACT" | "NO_BODY";
   message: string;
 }
 
@@ -88,11 +104,6 @@ export interface PaperStatus {
   /** Every section the paper can carry, so each gets a box. */
   sectionFields: PaperSectionField[];
 }
-
-const SECTION_FIELDS: PaperSectionField[] = SECTION_PLAN.map((plan) => ({
-  field: plan.field,
-  heading: plan.heading,
-}));
 
 function countWords(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
@@ -164,8 +175,8 @@ export function parseReferences(input: string[] | undefined): string[] {
 }
 
 /**
- * The proposal — for the approval gate and the student's own identity — plus
- * everyone they are entitled to credit.
+ * The proposal — for the approval gate and the student's own identity — the
+ * locked chapters that supply the body, and everyone they may credit.
  *
  * A team is implicit in this schema: it is the set of TeamInvite rows that
  * reached ACCEPTED, in either direction. The supervisor comes from an accepted
@@ -173,13 +184,21 @@ export function parseReferences(input: string[] | undefined): string[] {
  * free-text field in which anyone could be credited with anyone's work.
  */
 async function loadContext(studentId: string) {
-  const [proposal, invites, match] = await Promise.all([
+  const [proposal, chapters, invites, match] = await Promise.all([
     prisma.thesisProposal.findUnique({
       where: { studentId },
       select: {
         status: true,
         student: { select: { id: true, name: true, email: true, department: true } },
       },
+    }),
+    // LOCKED only. An approved chapter can still be reopened by the student or
+    // withdrawn by the supervisor, so typesetting one would mean the paper's
+    // source could change underneath it.
+    prisma.thesisChapter.findMany({
+      where: { studentId, status: "LOCKED" },
+      orderBy: { number: "asc" },
+      select: { id: true, number: true, title: true, content: true },
     }),
     prisma.teamInvite.findMany({
       where: {
@@ -217,7 +236,7 @@ async function loadContext(studentId: string) {
     people.set(match.supervisor.user.id, { ...match.supervisor.user, relation: "supervisor" });
   }
 
-  return { proposal, people };
+  return { proposal, chapters, people };
 }
 
 export interface PaperOptions {
@@ -250,6 +269,7 @@ export class IeeePaperService {
   static async status(studentId: string, options: PaperOptions = {}): Promise<PaperStatus> {
     const context = await loadContext(studentId);
     const candidates = IeeePaperService.candidates(context.people, options);
+    const sectionFields = IeeePaperService.sectionFields(context);
 
     if (!context.proposal) {
       return {
@@ -257,7 +277,7 @@ export class IeeePaperService {
         proposalStatus: null,
         outline: null,
         candidates,
-        sectionFields: SECTION_FIELDS,
+        sectionFields,
         blockers: [{ code: "NO_PROPOSAL", message: "You have not started a thesis proposal yet." }],
       };
     }
@@ -268,6 +288,13 @@ export class IeeePaperService {
         code: "NOT_APPROVED",
         message:
           "Your proposal has not been approved yet. The transpiler only typesets for students a supervisor has signed off.",
+      });
+    }
+    if (context.chapters.length === 0) {
+      blockers.push({
+        code: "NO_LOCKED_CHAPTERS",
+        message:
+          "No chapters are locked yet. A paper reports finished work, so its sections come from chapters your supervisor has locked.",
       });
     }
 
@@ -311,48 +338,71 @@ export class IeeePaperService {
       proposalStatus: context.proposal.status,
       outline,
       candidates,
-      sectionFields: SECTION_FIELDS,
+      sectionFields,
     };
   }
 
+  /** One box per locked chapter, in thesis order, headed by the chapter's own title. */
+  private static sectionFields(
+    context: Awaited<ReturnType<typeof loadContext>>
+  ): PaperSectionField[] {
+    return context.chapters.map((chapter) => ({ field: chapter.id, heading: chapter.title }));
+  }
+
   /**
-   * The student's proposal text, for the page's "load from my proposal" button.
+   * The paper's identity, from the proposal: title and abstract only.
+   *
+   * These are the two fields a proposal legitimately still owns — the student
+   * wrote them to name the work, not to plan it, so they survive the work being
+   * done. Everything else the proposal holds is intent, and intent does not
+   * belong in a paper that reports results.
    *
    * Deliberately a separate call rather than part of the status payload: the
-   * page starts empty, and shipping this text on every keystroke-pause refresh
-   * would be both wasteful and an invitation to prefill something the student
-   * never asked for. It is fetched once, when the button is pressed.
+   * page starts empty, and shipping this on every keystroke-pause refresh would
+   * be both wasteful and an invitation to prefill something the student never
+   * asked for. It is fetched once, when the button is pressed.
    */
-  static async draft(studentId: string): Promise<{
-    title: string;
-    abstract: string;
-    sections: Partial<Record<SectionField, string>>;
-  } | null> {
+  static async identity(studentId: string): Promise<{ title: string; abstract: string } | null> {
     const proposal = await prisma.thesisProposal.findUnique({
       where: { studentId },
-      select: {
-        title: true,
-        abstract: true,
-        problemStatement: true,
-        researchObjectives: true,
-        methodologyOutline: true,
-        methodology: true,
-        expectedContribution: true,
-        limitations: true,
-      },
+      select: { title: true, abstract: true },
     });
     if (!proposal) return null;
 
-    const sections: Partial<Record<SectionField, string>> = {};
-    for (const plan of SECTION_PLAN) {
-      const text =
-        (proposal[plan.field] ?? "").trim() ||
-        // The proposal builder writes methodologyOutline; `methodology` predates it.
-        (plan.field === "methodologyOutline" ? proposal.methodology.trim() : "");
-      if (text) sections[plan.field] = text;
+    return { title: proposal.title.trim(), abstract: proposal.abstract.trim() };
+  }
+
+  /**
+   * The paper's body, from the student's locked chapters.
+   *
+   * Keyed by chapter id so the text lands in the box that belongs to it, and so
+   * a chapter renamed between load and submit still matches.
+   */
+  static async chapterBodies(studentId: string): Promise<{
+    sections: Record<string, string>;
+    chapters: { id: string; number: number; title: string; words: number }[];
+  }> {
+    const chapters = await prisma.thesisChapter.findMany({
+      where: { studentId, status: "LOCKED" },
+      orderBy: { number: "asc" },
+      select: { id: true, number: true, title: true, content: true },
+    });
+
+    const sections: Record<string, string> = {};
+    for (const chapter of chapters) {
+      const text = chapter.content.trim();
+      if (text) sections[chapter.id] = text;
     }
 
-    return { title: proposal.title.trim(), abstract: proposal.abstract.trim(), sections };
+    return {
+      sections,
+      chapters: chapters.map((c) => ({
+        id: c.id,
+        number: c.number,
+        title: c.title,
+        words: countWords(c.content.trim()),
+      })),
+    };
   }
 
   /** The finished PDF, plus a filename derived from the paper's own title. */
@@ -362,6 +412,9 @@ export class IeeePaperService {
   ): Promise<{ buffer: Buffer; fileName: string; pageCount: number } | null> {
     const context = await loadContext(studentId);
     if (!context.proposal || context.proposal.status !== ProposalStatus.APPROVED) return null;
+    // Same gate as status(): no locked chapters means there is no finished work
+    // to report, whatever was typed into the boxes.
+    if (context.chapters.length === 0) return null;
 
     const paper = IeeePaperService.buildPaper(context, options);
     // A paper with no title and nothing in it is not a paper; refusing here
@@ -421,12 +474,15 @@ export class IeeePaperService {
       email: p.email,
     }));
 
+    // One section per locked chapter, in thesis order. A chapter whose box was
+    // left empty is skipped rather than emitted blank, so a student can drop a
+    // chapter from the paper without unlocking anything.
     const sections: IeeeSection[] = [];
-    for (const plan of SECTION_PLAN) {
-      const text = options.sections?.[plan.field]?.trim();
+    for (const chapter of context.chapters) {
+      const text = options.sections?.[chapter.id]?.trim();
       if (!text) continue;
       const { blocks, subsections } = parseFieldBlocks(text);
-      sections.push({ heading: plan.heading, blocks, subsections });
+      sections.push({ heading: chapter.title, blocks, subsections });
     }
 
     return {
