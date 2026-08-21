@@ -213,10 +213,15 @@ model TeamInvite {
 /// revised in place (see ProposalHistoryEntry for the version/feedback
 /// timeline) rather than resubmitted as a new record each time.
 ///
-/// title/abstract/methodology/limitations predate this feature (added as a
-/// placeholder for Module 3 (Member 2)'s Mock Defense Simulator, which reads
-/// a proposal's content as AI context) and are kept, now default-valued, so
-/// that still-planned feature isn't blocked by this one shipping first.
+/// title/abstract are the thesis's identity, and the proposal form collects
+/// them: they are required to submit. Downstream modules read them rather than
+/// inventing their own — Module 3 (Member 2)'s Mock Defense Simulator uses them
+/// as the examiner's context, and its IEEE Paper Transpiler loads them as the
+/// paper's title and abstract. They were default-valued placeholders until the
+/// form asked for them, which meant both of those readers silently got "".
+///
+/// methodology/limitations still predate this feature and remain default-valued;
+/// methodologyOutline superseded methodology.
 model ThesisProposal {
   id          String @id @default(uuid())
   title       String @default("")
