@@ -4,6 +4,8 @@ import prisma from "@/lib/prisma";
 import { GithubVerifyForm } from "@/components/matchmaking/GithubVerifyForm";
 import { ChangePasswordForm } from "@/components/profile/ChangePasswordForm";
 import { UpdateNameForm } from "@/components/profile/UpdateNameForm";
+import { NotificationEmailForm } from "@/components/notifications/NotificationEmailForm";
+import { NotificationService } from "@/services/notification.service";
 import {
   UserIcon,
   MailIcon,
@@ -34,7 +36,7 @@ export default async function ProfilePage() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.sub },
-    select: { name: true, email: true, role: true, department: true, studentId: true, createdAt: true },
+    select: { name: true, email: true, notificationEmail: true, role: true, department: true, studentId: true, createdAt: true },
   });
   if (!user) redirect("/login");
 
@@ -108,6 +110,20 @@ export default async function ProfilePage() {
           />
         </div>
       )}
+
+      {/*
+        Module 3 (Member 3): notification email. Sits beside GitHub verification
+        because it is the same kind of thing — an external detail the platform
+        needs in order to reach the user somewhere the account does not say.
+        Shown to every role: supervisors get alerts too.
+      */}
+      <div className="mt-6 rounded-lg border border-border bg-surface p-6">
+        <NotificationEmailForm
+          accountEmail={user.email}
+          initialNotificationEmail={user.notificationEmail}
+          emailConfigured={NotificationService.providerStatus().email}
+        />
+      </div>
 
       {/* Change password */}
       <div className="mt-6 rounded-lg border border-border bg-surface p-6">
