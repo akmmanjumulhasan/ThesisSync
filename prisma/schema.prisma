@@ -62,6 +62,17 @@ model User {
   role         Role     @default(STUDENT)
   createdAt    DateTime @default(now())
 
+  /// Module 3 (Member 3): Smart Notification System.
+  ///
+  /// Where alerts are emailed. Separate from `email`, which is the university
+  /// address the account was registered with and is often not a mailbox anyone
+  /// reads — a student signs up as `23101266@g.bracu.ac.bd` and lives in Gmail.
+  /// Sending alerts to an inbox nobody opens is the same as not sending them.
+  ///
+  /// Null means fall back to `email`, so an account that never sets one still
+  /// gets its notifications rather than silently getting none.
+  notificationEmail String?
+
   // Module 1 (Member 1): Research Landscape & Trend Analyzer
   researchQueries ResearchQuery[]
 
@@ -97,6 +108,10 @@ model User {
   // Module 3 (Member 3): Chapter Approval Workflow
   chapters     ThesisChapter[]     @relation("StudentChapters")
   chapterAudit ChapterAuditEntry[] @relation("ChapterActor")
+
+  // Module 3 (Member 3): Smart Notification System
+  notifications           Notification[]           @relation("Recipient")
+  notificationPreferences NotificationPreference[] @relation("NotifyPrefs")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -664,6 +679,22 @@ model ThesisChapter {
   /// first, so the chapter that has been waiting longest is reviewed first.
   submittedAt DateTime?
 
+  /// Module 3 (Member 3): Smart Notification System.
+  ///
+  /// The date this chapter is expected by, set by the supervisor. Null means no
+  /// deadline, which is not the same as an overdue one — a chapter nobody has
+  /// dated should never generate a reminder.
+  ///
+  /// Lives on the chapter rather than in a separate Deadline model because a
+  /// deadline here is always *for* a chapter: there is nothing else in the
+  /// thesis lifecycle that falls due, and a standalone table would need a
+  /// polymorphic subject to say the same thing.
+  dueAt DateTime?
+  /// Set when a DEADLINE_APPROACHING notification has gone out for the current
+  /// dueAt, so a scheduler that runs hourly does not send an hourly reminder.
+  /// Cleared whenever dueAt changes.
+  deadlineNotifiedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -713,4 +744,140 @@ model ChapterAuditEntry {
   createdAt DateTime @default(now())
 
   @@index([chapterId, createdAt])
+}
+
+/// Module 3 (Member 3): Smart Notification System.
+///
+/// The events the platform can tell someone about. One value per thing that
+/// actually happens, because preferences are stored per event — a student who
+/// wants an email the moment a chapter is returned but nothing at all for a
+/// contribution update needs those to be separately addressable.
+///
+/// Named after the event, not the recipient: CHAPTER_RETURNED is the same
+/// occurrence whether it lands on the student who wrote it or the supervisor
+/// who sent it back, and duplicating the enum per audience would double every
+/// preference row for no gain.
+enum NotificationEvent {
+  PROPOSAL_APPROVED
+  PROPOSAL_RETURNED
+  CHAPTER_SUBMITTED
+  CHAPTER_APPROVED
+  CHAPTER_RETURNED
+  CHAPTER_LOCKED
+  SUPERVISOR_COMMENT
+  DEADLINE_APPROACHING
+  MATCH_REQUEST_RECEIVED
+  MATCH_REQUEST_DECIDED
+  TEAM_INVITE_RECEIVED
+  CONTRIBUTION_UPDATE
+}
+
+/// Module 3 (Member 3): where a notification is delivered.
+///
+/// IN_APP is not configurable and is always written. It is the record that the
+/// event happened at all, and the bell menu reads it; letting a user switch it
+/// off would mean events silently vanishing with nothing to audit against.
+/// EMAIL is the one a user opts into.
+///
+/// The requirement also names SMS via Twilio. It is not implemented: Twilio
+/// could not reliably deliver to the Bangladeshi numbers this platform's users
+/// have, and an alert channel that silently never arrives is worse than one
+/// that was never offered.
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+/// Module 3 (Member 3): how one delivery attempt ended.
+///
+/// SKIPPED is distinct from FAILED on purpose. "The user turned email off" and
+/// "EmailJS rejected the address" look identical in a boolean and need
+/// completely different responses — one is correct behaviour, the other is a bug.
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// Module 3 (Member 3): one thing that happened, addressed to one person.
+///
+/// Written for every event regardless of channel preferences, so the in-app
+/// feed is always complete and a user who later turns email on can still see
+/// what they missed. The per-channel outcome lives in NotificationDelivery.
+///
+/// The message is rendered at write time rather than at read time. A
+/// notification describes a moment — "Dr. Islam returned Chapter 3" — and
+/// re-deriving that later from live rows would silently rewrite history once
+/// the chapter moved on again.
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("Recipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  event NotificationEvent
+  title String
+  body  String
+
+  /// Where to go to act on it. Relative path, so it survives a domain change.
+  link String?
+
+  /// What it is about, for de-duplication and for cleaning up if the subject is
+  /// deleted. Loose by design: notifications outlive the rows they describe.
+  subjectType String?
+  subjectId   String?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  deliveries NotificationDelivery[]
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, event, subjectId])
+}
+
+/// Module 3 (Member 3): one attempt to push a notification down one channel.
+///
+/// Kept even when it was skipped or failed. "Why didn't I get a text?" is the
+/// single most common question a notification system has to answer, and without
+/// a per-channel record the only honest answer is a shrug.
+///
+/// providerId holds EmailJS's response, so a delivery can be traced in the
+/// provider's own dashboard.
+model NotificationDelivery {
+  id             String       @id @default(uuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  channel    NotificationChannel
+  status     DeliveryStatus      @default(PENDING)
+  /// Where it went — the address at send time, since a user can change theirs.
+  destination String?
+  /// Provider message id on success, or the reason on failure/skip.
+  detail     String?
+  providerId String?
+  attemptedAt DateTime           @default(now())
+
+  @@unique([notificationId, channel])
+  @@index([status, attemptedAt])
+}
+
+/// Module 3 (Member 3): one user's choice for one event.
+///
+/// Absent means "use the default for this event" rather than "off" — see
+/// DEFAULT_CHANNELS in src/lib/notifications.ts. Storing only the deviations
+/// keeps a new user from needing a dozen rows written at signup, and lets the
+/// sensible default change later without a migration rewriting everyone's
+/// settings.
+model NotificationPreference {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("NotifyPrefs", fields: [userId], references: [id], onDelete: Cascade)
+
+  event NotificationEvent
+  email Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, event])
 }

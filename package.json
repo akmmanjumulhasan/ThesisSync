@@ -4,6 +4,7 @@
   "description": "ThesisSync: CSE471 Group 10. Module 1 (Member 2): Unified Matchmaking Engine, plus shared registration/login.",
   "private": true,
   "scripts": {
+    "predev": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

@@ -187,10 +187,11 @@ export const ROADMAP: RoadmapModule[] = [
       },
       {
         title: "Smart Notification System",
-        description: "Email and SMS alerts for approvals, feedback, and approaching deadlines.",
+        description: "Email alerts for approvals, feedback, comments, and approaching deadlines.",
         icon: BellIcon,
-        status: "planned",
+        status: "live",
         owner: "Member 3",
+        liveHref: "/dashboard/notifications",
       },
     ],
   },

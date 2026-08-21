@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma, ProposalStatus, RequestStatus, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { NotificationService } from "@/services/notification.service";
 import {
   MAX_CHAPTERS,
   MAX_COMMENT_LENGTH,
@@ -376,7 +377,108 @@ export async function transitionChapter(
     throw e;
   }
 
+  // Module 3 (Member 3): Smart Notification System.
+  //
+  // Raised after the transaction commits, so nothing is announced that was
+  // rolled back, and outside it, so a provider timeout cannot hold a database
+  // transaction open. Failures are swallowed by safeNotify — losing an alert is
+  // recoverable, losing the transition that earned it is not.
+  await notifyChapterTransition(chapterId, transition.event, comment, actor);
+
   return { ok: true, data: { id: chapterId } };
+}
+
+/**
+ * Turn a completed transition into an alert for whoever is now waiting.
+ *
+ * The recipient flips with the direction of the move: a submission lands on the
+ * supervisor's desk, everything else lands back on the student's. A student's
+ * own REOPEN notifies nobody — they did it themselves, and telling someone what
+ * they just did is how a notification feed becomes noise people mute.
+ */
+async function notifyChapterTransition(
+  chapterId: string,
+  event: string,
+  comment: string,
+  actor: TransitionActor
+): Promise<void> {
+  const chapter = await prisma.thesisChapter.findUnique({
+    where: { id: chapterId },
+    select: { id: true, number: true, title: true, studentId: true },
+  });
+  if (!chapter) return;
+
+  const label = `Chapter ${chapter.number}: ${chapter.title}`;
+
+  if (event === "SUBMITTED") {
+    const supervisorUserId = await supervisorUserFor(chapter.studentId);
+    if (!supervisorUserId) return;
+    await NotificationService.safeNotify({
+      userId: supervisorUserId,
+      event: "CHAPTER_SUBMITTED",
+      title: `${actor.name} submitted a chapter`,
+      body: `${label} is waiting for your review.`,
+      link: "/dashboard/chapter-reviews",
+      subjectType: "chapter",
+      subjectId: chapter.id,
+    });
+    return;
+  }
+
+  const forStudent: Record<string, { event: string; title: string; body: string }> = {
+    APPROVED: {
+      event: "CHAPTER_APPROVED",
+      title: `${label} was approved`,
+      body: `${actor.name} approved this chapter.${comment ? ` They added: "${comment}"` : ""}`,
+    },
+    RETURNED: {
+      event: "CHAPTER_RETURNED",
+      title: `${label} was returned for revision`,
+      body: `${actor.name} sent this chapter back: "${comment}"`,
+    },
+    LOCKED: {
+      event: "CHAPTER_LOCKED",
+      title: `${label} was locked`,
+      body: `${actor.name} committed this chapter to your final thesis. It can no longer be edited.`,
+    },
+  };
+
+  const plan = forStudent[event];
+  if (!plan) return;
+
+  await NotificationService.safeNotify({
+    userId: chapter.studentId,
+    event: plan.event as never,
+    title: plan.title,
+    body: plan.body,
+    link: "/dashboard/chapters",
+    subjectType: "chapter",
+    subjectId: chapter.id,
+  });
+
+  // A returned chapter carries the supervisor's reasoning, which is feedback in
+  // its own right. Sent as a separate SUPERVISOR_COMMENT so a student who wants
+  // texts for feedback but not for status changes can have exactly that.
+  if (event === "RETURNED" && comment) {
+    await NotificationService.safeNotify({
+      userId: chapter.studentId,
+      event: "SUPERVISOR_COMMENT",
+      title: `${actor.name} commented on ${label}`,
+      body: comment,
+      link: "/dashboard/chapters",
+      subjectType: "chapter",
+      subjectId: chapter.id,
+    });
+  }
+}
+
+/** The user id of a student's accepted supervisor, or null if they have none. */
+async function supervisorUserFor(studentId: string): Promise<string | null> {
+  const match = await prisma.matchRequest.findFirst({
+    where: { studentId, status: RequestStatus.ACCEPTED },
+    select: { supervisor: { select: { userId: true } } },
+  });
+  return match?.supervisor.userId ?? null;
 }
 
 /** Raised inside the transition transaction when the row moved underneath us. */
