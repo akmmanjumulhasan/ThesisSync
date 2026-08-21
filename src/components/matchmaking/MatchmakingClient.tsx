@@ -64,6 +64,55 @@ interface Teammate {
   } | null;
 }
 
+/**
+ * Every panel's data fetch, with the failure modes made visible.
+ *
+ * `res.json()` on its own is a trap here: a response that is not JSON — a 404's
+ * HTML body, a proxy error page, an interrupted connection — makes it throw,
+ * and in a `try/finally` with no `catch` that rejection escapes unhandled. The
+ * panel then renders no results, no error and no empty-state text, which looks
+ * exactly like "nothing matched your search". A broken request and an empty
+ * result are very different facts and must never be shown the same way.
+ *
+ * So the body is read as text first and parsed defensively, and every outcome
+ * comes back as a value rather than an exception.
+ */
+async function fetchJson<T>(url: string): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    return { ok: false, error: "Couldn't reach the server. Check your connection and try again." };
+  }
+
+  const text = await res.text().catch(() => "");
+  let parsed: unknown = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (!res.ok) {
+    const fromServer = (parsed as { error?: string } | null)?.error;
+    if (fromServer) return { ok: false, error: fromServer };
+    // No JSON body means this never reached the route — a stale build manifest
+    // or a bad path, not something the user did wrong.
+    return {
+      ok: false,
+      error: `The server returned ${res.status} for this request. Try again, or reload the page.`,
+    };
+  }
+
+  if (parsed === null) {
+    return { ok: false, error: "The server sent a response this page could not read." };
+  }
+
+  return { ok: true, data: parsed as T };
+}
+
 export function MatchmakingClient({
   userName,
   initialKeywords,
@@ -103,14 +152,18 @@ export function MatchmakingClient({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/match/supervisors?keywords=${encodeURIComponent(keywordsInput)}`);
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error ?? "Failed to run match.");
+        const result = await fetchJson<{ matches: SupervisorMatch[] }>(
+          `/api/match/supervisors?keywords=${encodeURIComponent(keywordsInput)}`
+        );
+        // hasSearched is set either way: the panel must say *something* after a
+        // search, even if what it says is that the search failed.
+        setHasSearched(true);
+        if (!result.ok) {
+          setError(result.error);
+          setSupervisorMatches([]);
           return;
         }
-        setSupervisorMatches(data.matches);
-        setHasSearched(true);
+        setSupervisorMatches(result.data.matches ?? []);
       } finally {
         setLoading(false);
       }
@@ -127,14 +180,16 @@ export function MatchmakingClient({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/match/teammates?skills=${encodeURIComponent(skillsInput)}`);
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error ?? "Failed to run match.");
+        const result = await fetchJson<{ matches: TeammateMatch[] }>(
+          `/api/match/teammates?skills=${encodeURIComponent(skillsInput)}`
+        );
+        setHasSearched(true);
+        if (!result.ok) {
+          setError(result.error);
+          setTeammateMatches([]);
           return;
         }
-        setTeammateMatches(data.matches);
-        setHasSearched(true);
+        setTeammateMatches(result.data.matches ?? []);
       } finally {
         setLoading(false);
       }
@@ -146,15 +201,16 @@ export function MatchmakingClient({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/match/invite");
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Failed to load invites.");
+      const result = await fetchJson<{ invites: ReceivedInvite[] }>("/api/match/invite");
+      setHasSearched(true);
+      if (!result.ok) {
+        setError(result.error);
+        setReceivedInvites([]);
         return;
       }
-      setReceivedInvites(data.invites);
-      setPendingInviteCount(data.invites.filter((i: ReceivedInvite) => i.status === "PENDING").length);
-      setHasSearched(true);
+      const invites = result.data.invites ?? [];
+      setReceivedInvites(invites);
+      setPendingInviteCount(invites.filter((i) => i.status === "PENDING").length);
     } finally {
       setLoading(false);
     }
@@ -164,15 +220,18 @@ export function MatchmakingClient({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/match/team");
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Failed to load your team.");
+      const result = await fetchJson<{ teammates: Teammate[]; count: number }>("/api/match/team");
+      setHasSearched(true);
+      if (!result.ok) {
+        setError(result.error);
+        // The server-rendered count stays as it is: it came from the page load
+        // and is still the last thing known to be true. Zeroing it because one
+        // refresh failed would claim the team had been emptied.
+        setTeammates([]);
         return;
       }
-      setTeammates(data.teammates);
-      setTeamCount(data.count);
-      setHasSearched(true);
+      setTeammates(result.data.teammates ?? []);
+      setTeamCount(result.data.count ?? 0);
     } finally {
       setLoading(false);
     }
@@ -402,7 +461,24 @@ export function MatchmakingClient({
         )}
 
         {notice && <p className="text-sm text-success-foreground">{notice}</p>}
-        {error && <p className="text-sm text-danger-foreground">{error}</p>}
+        {error && (
+          <div className="rounded-md border border-danger-bg bg-danger-bg px-3 py-2.5">
+            <p className="text-sm text-danger-foreground">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                if (mode === "SUPERVISOR") void runSupervisorMatch();
+                else if (mode === "TEAMMATE") void runTeammateMatch();
+                else if (mode === "TEAM") void loadTeam();
+                else void loadReceivedInvites();
+              }}
+              disabled={loading}
+              className="mt-1 text-xs font-medium text-danger-foreground underline hover:no-underline disabled:opacity-50"
+            >
+              {loading ? "Retrying…" : "Try again"}
+            </button>
+          </div>
+        )}
 
         {/* Results */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -433,8 +509,14 @@ export function MatchmakingClient({
             ))}
         </div>
 
+        {/*
+          Only when the request actually succeeded. Showing "no supervisors
+          matched" next to "the server returned 404" would tell the user their
+          search came back empty when in fact it never ran.
+        */}
         {hasSearched &&
           !loading &&
+          !error &&
           ((mode === "SUPERVISOR" && supervisorMatches.length === 0) ||
             (mode === "TEAMMATE" && teammateMatches.length === 0) ||
             (mode === "INVITES" && receivedInvites.length === 0) ||
