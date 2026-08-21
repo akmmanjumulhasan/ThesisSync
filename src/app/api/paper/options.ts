@@ -14,19 +14,20 @@ const MAX_HEADER = 120;
 const MAX_AFFILIATION = 160;
 const MAX_TITLE = 300;
 const MAX_ABSTRACT = 4000;
-/** Matches the proposal builder's own per-field cap. */
-const MAX_SECTION = 4000;
+/**
+ * Sections now carry chapter prose rather than a proposal's short fields, so
+ * the old 4,000-character cap (which matched the proposal builder) would have
+ * silently truncated real chapters. Still bounded — a conference paper is a few
+ * pages, and an unbounded body would be a denial-of-service vector on the
+ * renderer.
+ */
+const MAX_SECTION = 20_000;
+/** A thesis is capped at 20 chapters, so a submission carrying more is malformed. */
+const MAX_SECTIONS = 20;
+const MAX_SECTION_KEY = 64;
 const MAX_REFERENCE = 600;
 const MAX_REFERENCES = 100;
 const MAX_AUTHORS = 12;
-
-const SECTION_FIELDS: SectionField[] = [
-  "problemStatement",
-  "researchObjectives",
-  "methodologyOutline",
-  "expectedContribution",
-  "limitations",
-];
 
 function text(value: unknown, limit: number): string | undefined {
   return typeof value === "string" ? value.slice(0, limit) : undefined;
@@ -41,14 +42,24 @@ function list(value: unknown, limit: number, max: number): string[] | undefined 
     .slice(0, max);
 }
 
-/** Only the fields the section plan knows about; anything else is discarded. */
+/**
+ * Section bodies, keyed by chapter id.
+ *
+ * There is no fixed key list to check against any more, because the sections
+ * are the student's own locked chapters. Bounds are enforced here — key shape,
+ * count and length — and the service does the authorization: it only emits
+ * sections for chapters that came back from the database as this student's and
+ * LOCKED, so a fabricated or borrowed id in this payload matches nothing and is
+ * dropped.
+ */
 function sections(value: unknown): PaperOptions["sections"] {
   if (!value || typeof value !== "object") return undefined;
   const source = value as Record<string, unknown>;
   const out: Partial<Record<SectionField, string>> = {};
-  for (const field of SECTION_FIELDS) {
-    const entry = text(source[field], MAX_SECTION);
-    if (entry !== undefined) out[field] = entry;
+  for (const key of Object.keys(source).slice(0, MAX_SECTIONS)) {
+    if (key.length > MAX_SECTION_KEY) continue;
+    const entry = text(source[key], MAX_SECTION);
+    if (entry !== undefined) out[key] = entry;
   }
   return out;
 }

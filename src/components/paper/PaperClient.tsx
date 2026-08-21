@@ -102,6 +102,7 @@ export function PaperClient({
 
   const [generating, setGenerating] = useState(false);
   const [loadingDraft, setLoadingDraft] = useState(false);
+  const [loadingChapters, setLoadingChapters] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string; fileName: string; pages: number } | null>(null);
 
@@ -184,7 +185,10 @@ export function PaperClient({
   }
 
   /**
-   * Pulls the student's proposal text into the boxes.
+   * Pulls the title and abstract from the proposal.
+   *
+   * Those two only — the proposal's other prose is a plan for work not yet
+   * done, and the body comes from locked chapters instead.
    *
    * Only ever on click: the page starts empty so nothing is carried in that the
    * student did not choose to put there.
@@ -200,20 +204,42 @@ export function PaperClient({
         return;
       }
 
-      const filled =
-        Boolean(data.title) || Boolean(data.abstract) || Object.keys(data.sections ?? {}).length > 0;
-      if (!filled) {
-        setError("Your proposal has no text to load yet.");
+      if (!data.title && !data.abstract) {
+        setError("Your proposal has no title or abstract to load yet.");
         return;
       }
 
       if (data.title) setTitle(data.title);
       if (data.abstract) setAbstract(data.abstract);
-      setSections((prev) => ({ ...prev, ...data.sections }));
     } catch {
       setError("Your proposal could not be loaded.");
     } finally {
       setLoadingDraft(false);
+    }
+  }
+
+  /** Fills each section box with the text of the locked chapter it belongs to. */
+  async function loadFromChapters() {
+    setLoadingChapters(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/paper/chapters");
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Your chapters could not be loaded.");
+        return;
+      }
+
+      if (Object.keys(data.sections ?? {}).length === 0) {
+        setError("Your locked chapters have no text in them yet.");
+        return;
+      }
+
+      setSections((prev) => ({ ...prev, ...data.sections }));
+    } catch {
+      setError("Your chapters could not be loaded.");
+    } finally {
+      setLoadingChapters(false);
     }
   }
 
@@ -236,6 +262,7 @@ export function PaperClient({
   const needsProposal = status.blockers.some(
     (b) => b.code === "NO_PROPOSAL" || b.code === "NOT_APPROVED"
   );
+  const needsChapters = status.blockers.some((b) => b.code === "NO_LOCKED_CHAPTERS");
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
@@ -275,10 +302,11 @@ export function PaperClient({
               ))}
             </ul>
             {/*
-              Only a missing or unapproved proposal is fixed in the proposal
-              builder. Once the gate has passed, the remaining blockers are just
-              empty boxes, and the useful action is filling them — sending the
-              student to a proposal they cannot even edit would be a dead end.
+              Each blocker has exactly one useful action. A missing or unapproved
+              proposal is fixed in the proposal builder; no locked chapters is
+              fixed in the chapter workflow, not here. Only once both gates have
+              passed are the remaining blockers just empty boxes, and then the
+              useful action is filling them.
             */}
             {needsProposal ? (
               <Link
@@ -287,15 +315,32 @@ export function PaperClient({
               >
                 Open the proposal builder →
               </Link>
-            ) : (
-              <Button
-                variant="outline"
-                onClick={loadFromProposal}
-                disabled={loadingDraft}
-                className="mt-3 px-3 py-1.5 text-xs"
+            ) : needsChapters ? (
+              <Link
+                href="/dashboard/chapters"
+                className="mt-3 inline-block text-sm font-medium text-accent hover:underline"
               >
-                {loadingDraft ? "Loading…" : "Load from my proposal"}
-              </Button>
+                Open the chapter workflow →
+              </Link>
+            ) : (
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={loadFromChapters}
+                  disabled={loadingChapters}
+                  className="px-3 py-1.5 text-xs"
+                >
+                  {loadingChapters ? "Loading…" : "Load body from my chapters"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={loadFromProposal}
+                  disabled={loadingDraft}
+                  className="px-3 py-1.5 text-xs"
+                >
+                  {loadingDraft ? "Loading…" : "Load title & abstract from my proposal"}
+                </Button>
+              </div>
             )}
           </div>
         )}
@@ -308,7 +353,7 @@ export function PaperClient({
 
               {!outline ? (
                 <p className="mt-3 text-sm text-muted">
-                  Nothing yet — an approved proposal is needed before a paper can be typeset.
+                  Nothing yet — a paper needs an approved proposal and at least one locked chapter.
                 </p>
               ) : (
                 <>
@@ -379,13 +424,37 @@ export function PaperClient({
 
             {/* Section bodies */}
             <div className="rounded-lg border border-border bg-surface p-5">
-              <h2 className="font-serif text-base font-semibold text-foreground">Sections</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-serif text-base font-semibold text-foreground">Sections</h2>
+                {status.sectionFields.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={loadFromChapters}
+                    disabled={loadingChapters}
+                    className="px-3 py-1.5 text-xs"
+                  >
+                    {loadingChapters ? "Loading…" : "Load from my chapters"}
+                  </Button>
+                )}
+              </div>
               <p className="mt-1 text-xs text-muted">
-                Numbered I, II, III… in the order below; empty sections are skipped entirely. Blank
-                lines start a new paragraph, a line beginning with{" "}
+                One section per locked chapter, in thesis order, under the chapter&apos;s own title.
+                Numbered I, II, III…; empty sections are skipped entirely. Blank lines start a new
+                paragraph, a line beginning with{" "}
                 <code className="rounded bg-background px-1">-</code> becomes a bullet, and{" "}
                 <code className="rounded bg-background px-1">## </code> opens a lettered subsection.
               </p>
+
+              {status.sectionFields.length === 0 && (
+                <p className="mt-3 rounded-md border border-border bg-background px-3 py-2 text-sm text-muted">
+                  No chapters are locked yet, so there is nothing to typeset. A paper reports
+                  finished work, so its sections come from chapters your supervisor has locked.{" "}
+                  <Link href="/dashboard/chapters" className="font-medium text-accent hover:underline">
+                    Open the chapter workflow
+                  </Link>
+                  .
+                </p>
+              )}
 
               <div className="mt-4 space-y-4">
                 {status.sectionFields.map((section, i) => (
@@ -566,8 +635,8 @@ export function PaperClient({
               )}
 
               <p className="mt-3 text-xs text-muted">
-                Start a line with <code className="rounded bg-background px-1">## </code> in a proposal
-                field to open a lettered IEEE subsection.
+                Start a line with <code className="rounded bg-background px-1">## </code> in a section
+                box to open a lettered IEEE subsection.
               </p>
             </div>
 
