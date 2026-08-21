@@ -181,8 +181,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "Chapter Approval Workflow",
         description: "Draft → Submitted → In Review → Approved → Locked, with a full audit trail at each stage.",
         icon: SlidersIcon,
-        status: "planned",
+        status: "live",
         owner: "Member 3",
+        liveHref: "/dashboard/chapters",
       },
       {
         title: "Smart Notification System",
