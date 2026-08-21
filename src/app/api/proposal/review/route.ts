@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ProposalEvent, ProposalStatus, RequestStatus, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { NotificationService } from "@/services/notification.service";
 
 /** Supervisor approves a submitted proposal, or returns it with comments for revision. */
 export async function PATCH(req: Request) {
@@ -52,6 +53,22 @@ export async function PATCH(req: Request) {
       },
     });
     return saved;
+  });
+
+  // Raised after the transaction commits, so a notification is never sent for a
+  // decision that rolled back. safeNotify swallows provider failures: an email
+  // outage must not turn a recorded approval into a 500 the supervisor retries.
+  await NotificationService.safeNotify({
+    userId: proposal.studentId,
+    event: action === "APPROVE" ? "PROPOSAL_APPROVED" : "PROPOSAL_RETURNED",
+    title: action === "APPROVE" ? "Your proposal was approved" : "Your proposal was returned",
+    body:
+      action === "APPROVE"
+        ? `${session.name} approved your thesis proposal. Chapter writing is now open.${remarks ? ` They added: "${remarks}"` : ""}`
+        : `${session.name} returned your proposal for revision: "${remarks}"`,
+    link: "/dashboard/proposal",
+    subjectType: "proposal",
+    subjectId: proposalId,
   });
 
   return NextResponse.json({ success: true, proposal: updated });
