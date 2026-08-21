@@ -151,8 +151,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "Version Control & Inline Annotation",
         description: "Timestamped draft versions with side-by-side diffs and inline supervisor comments.",
         icon: HistoryIcon,
-        status: "planned",
-        owner: "Member 1",
+        status: "live",
+        owner: "Member 1 · You",
+        liveHref: "/dashboard/drafts",
       },
       {
         title: "University Thesis Repository",
