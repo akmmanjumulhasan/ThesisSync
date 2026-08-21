@@ -16,7 +16,7 @@ export default async function DraftsPage() {
     );
   }
 
-  const chapters = await prisma.thesisChapter.findMany({
+  const chapters = await prisma.chapterDraft.findMany({
     where: { studentId: session.sub },
     include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 }, _count: { select: { versions: true } } },
     orderBy: { updatedAt: "desc" },

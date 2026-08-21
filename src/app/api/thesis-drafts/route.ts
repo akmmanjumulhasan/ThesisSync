@@ -41,7 +41,7 @@ export async function GET(req: Request) {
     if (session.role !== Role.STUDENT) {
       return NextResponse.json({ error: "Only students have their own chapters." }, { status: 403 });
     }
-    const chapters = await prisma.thesisChapter.findMany({
+    const chapters = await prisma.chapterDraft.findMany({
       where: { studentId: session.sub },
       include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 }, _count: { select: { versions: true } } },
       orderBy: { updatedAt: "desc" },
@@ -59,7 +59,7 @@ export async function GET(req: Request) {
     });
   }
 
-  const chapter = await prisma.thesisChapter.findUnique({ where: { id: chapterId } });
+  const chapter = await prisma.chapterDraft.findUnique({ where: { id: chapterId } });
   if (!chapter) {
     return NextResponse.json({ error: "Chapter not found." }, { status: 404 });
   }
@@ -117,13 +117,13 @@ export async function POST(req: Request) {
     if (!title) {
       return NextResponse.json({ error: "A chapter title is required." }, { status: 400 });
     }
-    const existing = await prisma.thesisChapter.findUnique({
+    const existing = await prisma.chapterDraft.findUnique({
       where: { studentId_title: { studentId: session.sub, title } },
     });
     if (existing) {
       return NextResponse.json({ error: "You already have a chapter with that title." }, { status: 409 });
     }
-    const chapter = await prisma.thesisChapter.create({ data: { studentId: session.sub, title } });
+    const chapter = await prisma.chapterDraft.create({ data: { studentId: session.sub, title } });
     return NextResponse.json({ chapter });
   }
 
@@ -134,7 +134,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "chapterId and non-empty content are required." }, { status: 400 });
     }
 
-    const chapter = await prisma.thesisChapter.findUnique({ where: { id: chapterId } });
+    const chapter = await prisma.chapterDraft.findUnique({ where: { id: chapterId } });
     if (!chapter || chapter.studentId !== session.sub) {
       return NextResponse.json({ error: "Chapter not found." }, { status: 404 });
     }
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
           writingCheck: issues ? ({ issues } as unknown as Prisma.InputJsonValue) : undefined,
         },
       });
-      await tx.thesisChapter.update({ where: { id: chapterId }, data: { updatedAt: new Date() } });
+      await tx.chapterDraft.update({ where: { id: chapterId }, data: { updatedAt: new Date() } });
       return created;
     });
 

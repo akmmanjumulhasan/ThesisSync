@@ -88,15 +88,15 @@ model User {
   repoAccess    RepositoryAccess[] @relation("RepoAccess")
 
   // Module 1 (Member 2): supervisor-approved teammate removal
-  removalRequestsMade     TeamRemovalRequest[] @relation("RemovalRequester")
-  removalRequestsAgainst  TeamRemovalRequest[] @relation("RemovalTarget")
+  removalRequestsMade    TeamRemovalRequest[] @relation("RemovalRequester")
+  removalRequestsAgainst TeamRemovalRequest[] @relation("RemovalTarget")
 
   // Module 2 (Member 3): Topic Novelty & Similarity Checker
   noveltyChecks NoveltyCheck[] @relation("NoveltyChecks")
 
   // Module 3 (Member 1): Version Control & Inline Annotation
-  thesisChapters ThesisChapter[] @relation("ChapterStudent")
-  draftComments  DraftComment[]  @relation("DraftCommentAuthor")
+  chapterDrafts ChapterDraft[] @relation("ChapterDraftStudent")
+  draftComments DraftComment[] @relation("DraftCommentAuthor")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -435,18 +435,18 @@ enum RepoAccessRole {
 /// that proved it is kept for display. Boards themselves stay keyed by the repo
 /// full name, so teammates who each connect the same repo share one board.
 model RepositoryAccess {
-  id         String         @id @default(uuid())
-  userId     String
-  user       User           @relation("RepoAccess", fields: [userId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation("RepoAccess", fields: [userId], references: [id], onDelete: Cascade)
   /// "owner/name", exactly as GitHub canonicalises it.
-  fullName   String
-  role       RepoAccessRole
+  fullName    String
+  role        RepoAccessRole
   /// The GitHub login the check was made against, so a later re-verification
   /// against a different account is visibly a different claim.
   githubLogin String
-  isPrivate  Boolean        @default(false)
-  verifiedAt DateTime       @default(now())
-  createdAt  DateTime       @default(now())
+  isPrivate   Boolean        @default(false)
+  verifiedAt  DateTime       @default(now())
+  createdAt   DateTime       @default(now())
 
   @@unique([userId, fullName])
   @@index([fullName])
@@ -511,20 +511,20 @@ model NoveltyCheck {
   sourceName String?
   /// Word count of what was actually scored, so a near-empty upload is visible
   /// rather than silently producing a flattering score.
-  wordCount  Int    @default(0)
+  wordCount  Int     @default(0)
 
   /// 0-100, higher is more novel. Title/abstract runs only.
-  noveltyScore   Int?
+  noveltyScore    Int?
   /// 0-100 highest cosine similarity found against the archive.
-  topSimilarity  Int            @default(0)
-  risk           SimilarityRisk @default(LOW)
+  topSimilarity   Int            @default(0)
+  risk            SimilarityRisk @default(LOW)
   /// Angles the corpus barely covers, and methodologies it already covers.
-  understudied   String[]       @default([])
-  alreadyCovered String[]       @default([])
+  understudied    String[]       @default([])
+  alreadyCovered  String[]       @default([])
   /// How many archived theses and external papers this was scored against, so
   /// the number shown to the student is the real corpus size at run time.
-  archiveSize    Int            @default(0)
-  externalSize   Int            @default(0)
+  archiveSize     Int            @default(0)
+  externalSize    Int            @default(0)
   /// The published papers this run actually matched: [{ title, venue, year,
   /// url, score }]. Stored so a result stays checkable after the fact, rather
   /// than collapsing into a single opaque percentage.
@@ -539,16 +539,16 @@ model NoveltyCheck {
 
 /// Module 2 (Member 3): a single archived thesis a run matched against.
 model SimilarityMatch {
-  id       String       @id @default(uuid())
-  checkId  String
-  check    NoveltyCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  thesisId String
-  thesis   ArchivedThesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid())
+  checkId     String
+  check       NoveltyCheck   @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  thesisId    String
+  thesis      ArchivedThesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
   /// 0-100 cosine similarity.
-  score    Int
+  score       Int
   /// The terms that drove the overlap, so a flagged match can be explained
   /// rather than just asserted.
-  sharedTerms String[] @default([])
+  sharedTerms String[]       @default([])
 
   @@unique([checkId, thesisId])
 }
@@ -582,10 +582,16 @@ model LiteratureCache {
 /// Module 3 (Member 1): Version Control & Inline Annotation (API: LanguageTool).
 /// A chapter is a named unit of thesis writing a student maintains across many
 /// saved, immutable versions.
-model ThesisChapter {
+///
+/// Named ChapterDraft, not ThesisChapter, because Module 3 (Member 3)'s Chapter
+/// Approval Workflow already owns that name for its own, differently-shaped
+/// chapter (a single edit-in-place row moving through an approval pipeline).
+/// The two are deliberately separate entities — see that model's docstring —
+/// so this one keeps its own name rather than merging into it.
+model ChapterDraft {
   id        String   @id @default(uuid())
   studentId String
-  student   User     @relation("ChapterStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  student   User     @relation("ChapterDraftStudent", fields: [studentId], references: [id], onDelete: Cascade)
   title     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -600,9 +606,9 @@ model ThesisChapter {
 /// and increments per chapter; diffs between any two versions are computed on
 /// demand (see src/lib/diff.ts) rather than stored.
 model DraftVersion {
-  id            String        @id @default(uuid())
+  id            String       @id @default(uuid())
   chapterId     String
-  chapter       ThesisChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  chapter       ChapterDraft @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   versionNumber Int
   content       String
   wordCount     Int
@@ -611,7 +617,7 @@ model DraftVersion {
   /// length, ruleId, category, replacements }] }. Null means the check
   /// couldn't be completed (external API unreachable), not "no issues found".
   writingCheck  Json?
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime     @default(now())
 
   comments DraftComment[]
 

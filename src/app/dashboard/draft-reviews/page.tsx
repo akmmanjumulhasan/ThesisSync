@@ -36,7 +36,7 @@ export default async function DraftReviewsPage() {
     })
   ).map((r) => r.studentId);
 
-  const chapters = await prisma.thesisChapter.findMany({
+  const chapters = await prisma.chapterDraft.findMany({
     where: { studentId: { in: acceptedStudentIds } },
     include: {
       student: { select: { name: true, email: true } },
