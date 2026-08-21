@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { RequestStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { parseCommaList, scoreTeammate } from "@/lib/matching";
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Provide at least one skill." }, { status: 400 });
   }
 
-  const [candidates, sentInvites] = await Promise.all([
+  const [candidates, invites] = await Promise.all([
     prisma.studentProfile.findMany({
       where: {
         openToTeam: true,
@@ -33,13 +34,28 @@ export async function GET(req: Request) {
         user: { select: { id: true, name: true, email: true, developerProfile: true } },
       },
     }),
+    // Both directions. A team link is symmetric — "My Team" counts anyone whose
+    // invite was accepted either way round — so looking only at invites this
+    // student *sent* left every teammate who invited them still showing an
+    // "Invite to Team" button, on someone already on their team.
     prisma.teamInvite.findMany({
-      where: { fromUserId: session.sub },
-      select: { toUserId: true, status: true },
+      where: { OR: [{ fromUserId: session.sub }, { toUserId: session.sub }] },
+      select: { fromUserId: true, toUserId: true, status: true },
     }),
   ]);
 
-  const inviteByUser = new Map(sentInvites.map((i) => [i.toUserId, i.status]));
+  // Keyed by the *other* person, whichever end of the invite they are on.
+  //
+  // A pair can hold two rows if both invited each other, so an ACCEPTED one
+  // always wins over a PENDING one: being on the team is the stronger fact, and
+  // showing "invite sent" to someone already teamed up is the bug this fixes.
+  const inviteByUser = new Map<string, string>();
+  for (const invite of invites) {
+    const otherId = invite.fromUserId === session.sub ? invite.toUserId : invite.fromUserId;
+    const existing = inviteByUser.get(otherId);
+    if (existing === RequestStatus.ACCEPTED) continue;
+    inviteByUser.set(otherId, invite.status);
+  }
 
   const ranked = candidates
     .filter((c) => c.user.developerProfile)

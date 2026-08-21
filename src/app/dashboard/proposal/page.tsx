@@ -39,6 +39,8 @@ export default async function ProposalPage() {
         proposal
           ? {
               id: proposal.id,
+              title: proposal.title,
+              abstract: proposal.abstract,
               problemStatement: proposal.problemStatement,
               researchObjectives: proposal.researchObjectives,
               methodologyOutline: proposal.methodologyOutline,

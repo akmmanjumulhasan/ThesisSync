@@ -7,6 +7,19 @@ import { CrossRefService } from "@/services/crossref.service";
 const CORE_FIELDS = ["problemStatement", "researchObjectives", "methodologyOutline", "expectedContribution"] as const;
 
 /**
+ * The thesis title and abstract.
+ *
+ * Held apart from CORE_FIELDS because they are shorter and differently capped,
+ * but they are required to submit just the same: a proposal without a title is
+ * not a proposal, and both are what downstream modules identify the work by —
+ * the IEEE Paper Transpiler loads them as the paper's identity, and the Mock
+ * Defense Simulator uses them as the examiner's context. Until this form
+ * collected them, both read empty columns.
+ */
+const TITLE_MAX = 300;
+const ABSTRACT_MAX = 4000;
+
+/**
  * Structured Thesis Proposal Builder: the signed-in student's proposal, its
  * CrossRef-resolved references, and its submission/feedback history.
  */
@@ -58,6 +71,8 @@ export async function POST(req: Request) {
     const value = typeof body[key] === "string" ? body[key].trim().slice(0, 4000) : "";
     fields[key] = value;
   }
+  fields.title = typeof body.title === "string" ? body.title.trim().slice(0, TITLE_MAX) : "";
+  fields.abstract = typeof body.abstract === "string" ? body.abstract.trim().slice(0, ABSTRACT_MAX) : "";
 
   const dois: string[] = Array.isArray(body.dois)
     ? [...new Set(body.dois.map((d: unknown) => (typeof d === "string" ? d.trim() : "")).filter(Boolean) as string[])]
@@ -73,6 +88,12 @@ export async function POST(req: Request) {
   }
 
   if (submit) {
+    if (!fields.title || !fields.abstract) {
+      return NextResponse.json(
+        { error: "A thesis title and abstract are required to submit." },
+        { status: 400 }
+      );
+    }
     if (CORE_FIELDS.some((key) => !fields[key])) {
       return NextResponse.json(
         { error: "Problem statement, research objectives, methodology outline, and expected contribution are all required to submit." },

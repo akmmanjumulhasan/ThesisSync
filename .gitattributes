@@ -1,0 +1,26 @@
+# Normalise line endings across the team.
+#
+# Without this, the same file differs between a Windows checkout and a
+# macOS/Linux one purely by CRLF vs LF. Git then reports changes that are not
+# real: `git diff` shows whole files as modified, and comparing a working tree
+# against a branch flags files whose content is identical.
+#
+# Text files are stored in the repository with LF and checked out with the
+# platform's native endings. Every blob here is already LF, so this changes no
+# file content — it only makes the behaviour explicit and identical for
+# everyone, instead of depending on each machine's core.autocrlf setting.
+* text=auto
+
+# Always LF regardless of platform: tooling that reads these expects it.
+*.sh   text eol=lf
+*.prisma text eol=lf
+
+# Binary — never transform, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

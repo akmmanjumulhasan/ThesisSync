@@ -59,41 +59,52 @@ export function questionsPerArea(depth: Depth): number {
  */
 const MAX_THESIS_CHARS = 9000;
 
+/**
+ * What the examiner is given to read.
+ *
+ * The body is the student's supervisor-approved chapters, not their proposal.
+ * A viva examines finished work: what was done, what was found, and what the
+ * evidence actually supports. A proposal states intent and contains no results,
+ * which made one of the four mandated focus areas — DATA_VALIDATION, "how the
+ * data was checked, and whether the evidence supports the claims" — impossible
+ * to ask about honestly. The model had no data to interrogate and could only
+ * invent questions about work that did not exist yet.
+ *
+ * Title and abstract still come from the proposal. Those name the work rather
+ * than plan it, and chapters carry no thesis-level equivalent — a chapter has
+ * its own title, not the thesis's. The cited references come from there too,
+ * since that is where DOIs are validated.
+ */
 export interface ThesisSource {
   title: string;
   abstract: string;
-  problemStatement: string;
-  researchObjectives: string;
-  methodologyOutline: string;
-  methodology: string;
-  expectedContribution: string;
-  limitations: string;
+  /** Approved or locked chapters, in thesis order. */
+  chapters: { number: number; title: string; content: string; status: string }[];
   references: { doi: string; resolvedTitle: string | null; resolvedYear: number | null }[];
 }
 
 /**
  * The thesis as the examiner reads it.
  *
- * Sections are labelled and empty ones are marked rather than dropped: a
- * missing methodology is itself something an examiner should ask about, and
- * silently omitting the heading would hide that.
+ * Chapters are labelled with their own titles and numbered as the student
+ * ordered them, so the examiner can cite "Chapter 3" back at them. An empty
+ * approved chapter is marked rather than dropped: a chapter with a heading and
+ * no substance is itself something an examiner should ask about, and silently
+ * omitting it would hide that.
  */
 export function buildThesisContext(source: ThesisSource): string {
-  const methodology = source.methodologyOutline.trim() || source.methodology.trim();
-
-  const sections: [string, string][] = [
-    ["TITLE", source.title],
-    ["ABSTRACT", source.abstract],
-    ["PROBLEM STATEMENT", source.problemStatement],
-    ["RESEARCH OBJECTIVES", source.researchObjectives],
-    ["METHODOLOGY", methodology],
-    ["EXPECTED CONTRIBUTION", source.expectedContribution],
-    ["STATED LIMITATIONS", source.limitations],
+  const parts = [
+    `## TITLE\n${source.title.trim() || "(untitled)"}`,
+    `## ABSTRACT\n${source.abstract.trim() || "(not stated in the thesis)"}`,
   ];
 
-  const parts = sections.map(
-    ([heading, text]) => `## ${heading}\n${text.trim() || "(not stated in the thesis)"}`
-  );
+  for (const chapter of source.chapters) {
+    parts.push(
+      `## CHAPTER ${chapter.number}: ${chapter.title}\n${
+        chapter.content.trim() || "(this chapter has been approved but is empty)"
+      }`
+    );
+  }
 
   if (source.references.length > 0) {
     const cited = source.references
@@ -116,16 +127,15 @@ export function buildThesisBrief(source: ThesisSource): string {
   return `TITLE: ${source.title.trim()}\n\nABSTRACT: ${source.abstract.trim() || "(none)"}`;
 }
 
-/** Enough substance to be worth examining at all. */
+/**
+ * Enough substance to be worth examining at all.
+ *
+ * Counts words across the approved chapters. A student with chapters that are
+ * approved but nearly empty gets told so, rather than getting a session of
+ * questions the model invented out of headings.
+ */
 export function hasExaminableContent(source: ThesisSource): boolean {
-  const body = [
-    source.problemStatement,
-    source.researchObjectives,
-    source.methodologyOutline || source.methodology,
-    source.expectedContribution,
-  ]
-    .join(" ")
-    .trim();
+  const body = source.chapters.map((c) => c.content).join(" ").trim();
   return Boolean(source.title.trim()) && body.split(/\s+/).filter(Boolean).length >= 60;
 }
 
