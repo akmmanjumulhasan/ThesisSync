@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { LogoutButton } from "@/components/LogoutButton";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { stageGroups } from "@/lib/roadmap";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -116,6 +117,9 @@ export function Sidebar({ session }: { session: SessionPayload }) {
             <p className="truncate text-sm font-medium text-sidebar-fg">{session.name}</p>
             <LogoutButton className="text-xs text-sidebar-muted hover:text-sidebar-fg" />
           </div>
+          {/* Module 3 (Member 3): sits with the account, not in the nav list —
+              it is a state indicator, not a destination. */}
+          <NotificationBell />
         </div>
       </div>
     </aside>
