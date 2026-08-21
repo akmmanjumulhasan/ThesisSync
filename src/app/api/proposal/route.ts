@@ -12,9 +12,10 @@ const CORE_FIELDS = ["problemStatement", "researchObjectives", "methodologyOutli
  * Held apart from CORE_FIELDS because they are shorter and differently capped,
  * but they are required to submit just the same: a proposal without a title is
  * not a proposal, and both are what downstream modules identify the work by —
- * the IEEE Paper Transpiler loads them as the paper's identity, and the Mock
- * Defense Simulator uses them as the examiner's context. Until this form
- * collected them, both read empty columns.
+ * the IEEE Paper Transpiler loads them as the paper's identity, the Mock
+ * Defense Simulator uses them as the examiner's context, and the University
+ * Thesis Repository (Module 3, Member 1) indexes on them once the proposal is
+ * approved. Until this form collected them, all three read empty columns.
  */
 const TITLE_MAX = 300;
 const ABSTRACT_MAX = 4000;
@@ -96,7 +97,10 @@ export async function POST(req: Request) {
     }
     if (CORE_FIELDS.some((key) => !fields[key])) {
       return NextResponse.json(
-        { error: "Problem statement, research objectives, methodology outline, and expected contribution are all required to submit." },
+        {
+          error:
+            "Title, abstract, problem statement, research objectives, methodology outline, and expected contribution are all required to submit.",
+        },
         { status: 400 }
       );
     }

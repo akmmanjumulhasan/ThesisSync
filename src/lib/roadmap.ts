@@ -159,8 +159,9 @@ export const ROADMAP: RoadmapModule[] = [
         title: "University Thesis Repository",
         description: "A searchable archive of completed theses by keyword, department, year, and supervisor.",
         icon: ArchiveIcon,
-        status: "planned",
-        owner: "Member 1",
+        status: "live",
+        owner: "Member 1 · You",
+        liveHref: "/dashboard/repository",
       },
       {
         title: "AI Mock Defense Simulator",

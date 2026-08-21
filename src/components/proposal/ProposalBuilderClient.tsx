@@ -196,8 +196,9 @@ export function ProposalBuilderClient({
           Title and abstract lead, because they are what the work is called
           rather than what it plans to do — and they are what every downstream
           module identifies this thesis by: the IEEE Paper Transpiler loads them
-          as the paper's identity, and the Mock Defense Simulator uses them as
-          the examiner's context.
+          as the paper's identity, the Mock Defense Simulator uses them as the
+          examiner's context, and the University Thesis Repository (Module 3,
+          Member 1) indexes on them once the proposal is approved.
         */}
         <div className="rounded-lg border border-border bg-surface p-5">
           <label className="mb-2 block text-sm font-medium text-muted">Thesis title</label>
