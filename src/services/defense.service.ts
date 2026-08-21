@@ -54,25 +54,43 @@ export interface DefenseState {
   session: DefenseSessionView | null;
 }
 
+/**
+ * The thesis the examiner will read: the proposal for identity, the
+ * supervisor-approved chapters for substance.
+ *
+ * APPROVED as well as LOCKED, unlike the IEEE transpiler, which takes locked
+ * chapters only. The difference is deliberate. A paper is a published artefact
+ * and must not drift from its source, so it waits for the final freeze. A mock
+ * defense is a rehearsal, and a student needs to practise while they are still
+ * finishing — making them wait until every chapter is locked would put the
+ * rehearsal after the point where it could still change anything.
+ *
+ * Both states are supervisor-signed-off either way, so the examiner never reads
+ * text nobody has reviewed.
+ */
 async function loadThesis(studentId: string) {
-  return prisma.thesisProposal.findUnique({
-    where: { studentId },
-    select: {
-      id: true,
-      title: true,
-      abstract: true,
-      problemStatement: true,
-      researchObjectives: true,
-      methodologyOutline: true,
-      methodology: true,
-      expectedContribution: true,
-      limitations: true,
-      references: {
-        select: { doi: true, resolvedTitle: true, resolvedYear: true },
-        orderBy: { createdAt: "asc" },
+  const [proposal, chapters] = await Promise.all([
+    prisma.thesisProposal.findUnique({
+      where: { studentId },
+      select: {
+        id: true,
+        title: true,
+        abstract: true,
+        references: {
+          select: { doi: true, resolvedTitle: true, resolvedYear: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
-    },
-  });
+    }),
+    prisma.thesisChapter.findMany({
+      where: { studentId, status: { in: ["APPROVED", "LOCKED"] } },
+      orderBy: { number: "asc" },
+      select: { number: true, title: true, content: true, status: true },
+    }),
+  ]);
+
+  if (!proposal) return null;
+  return { ...proposal, chapters };
 }
 
 /**
@@ -121,11 +139,19 @@ export class DefenseService {
     const ready = hasExaminableContent(thesis as ThesisSource);
     const session = await DefenseService.latestSession(studentId);
 
+    // Separate the two reasons a thesis is not examinable. "No approved
+    // chapters" is fixed in the chapter workflow; "approved but thin" is fixed
+    // by writing. Collapsing them into one message would send a student to the
+    // wrong place.
+    const blocker = ready
+      ? null
+      : thesis.chapters.length === 0
+        ? "An examiner reads your chapters, and none have been approved yet. Get a chapter through the approval workflow first."
+        : "Your approved chapters are too short to question. An examiner needs a substantial body of work to read.";
+
     return {
       ready,
-      blocker: ready
-        ? null
-        : "Your thesis needs a title and a substantial body before an examiner can question it.",
+      blocker,
       thesisTitle: thesis.title.trim() || null,
       session,
     };
