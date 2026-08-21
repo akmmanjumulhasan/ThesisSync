@@ -16,6 +16,9 @@ async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
 
   // Reset in FK-safe order.
+  await prisma.notificationDelivery.deleteMany({});
+  await prisma.notification.deleteMany({});
+  await prisma.notificationPreference.deleteMany({});
   await prisma.chapterAuditEntry.deleteMany({});
   await prisma.thesisChapter.deleteMany({});
   await prisma.gitEvent.deleteMany({});
