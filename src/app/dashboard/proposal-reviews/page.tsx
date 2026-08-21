@@ -64,8 +64,16 @@ export default async function ProposalReviewsPage() {
                     {p.student.name} <span className="text-xs font-normal text-muted">· v{p.version}</span>
                   </p>
                   <p className="text-sm text-muted">{p.student.email}</p>
+                  {p.title && <p className="mt-1.5 font-serif text-base text-foreground">{p.title}</p>}
                 </div>
               </div>
+
+              {p.abstract && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Abstract</p>
+                  <p className="mt-1 text-sm text-foreground">{p.abstract}</p>
+                </div>
+              )}
 
               <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div>
