@@ -34,7 +34,16 @@ const SUPERVISOR_NAV: NavGroup[] = [
   },
 ];
 
-const ADMIN_NAV: NavGroup[] = [];
+const ADMIN_NAV: NavGroup[] = [
+  {
+    stage: "Workspace",
+    items: [
+      { number: 1, title: "Users & access", href: "/dashboard/admin" },
+      { number: 2, title: "Activity log", href: "/dashboard/admin/activity" },
+      { number: 3, title: "Profile", href: "/dashboard/profile" },
+    ],
+  },
+];
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
