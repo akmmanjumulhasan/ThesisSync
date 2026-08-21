@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { RequestStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { NotificationService } from "@/services/notification.service";
 
 /** Teammate mode: invite a GitHub-verified student to team up. */
 export async function POST(req: Request) {
@@ -27,6 +28,19 @@ export async function POST(req: Request) {
     where: { fromUserId_toUserId: { fromUserId: session.sub, toUserId } },
     update: { status: RequestStatus.PENDING },
     create: { fromUserId: session.sub, toUserId, status: RequestStatus.PENDING },
+  });
+
+  // Module 3 (Member 3): Smart Notification System. Deduped like supervision
+  // requests, since re-inviting the same person is legal but not news.
+  await NotificationService.safeNotify({
+    userId: toUserId,
+    event: "TEAM_INVITE_RECEIVED",
+    title: `${session.name} invited you to team up`,
+    body: `${session.name} wants to work with you on their thesis. Accept or decline it from matchmaking.`,
+    link: "/dashboard/matchmaking",
+    subjectType: "teamInvite",
+    subjectId: invite.id,
+    dedupeWithinMs: 60 * 60 * 1000,
   });
 
   return NextResponse.json({ success: true, invite });
