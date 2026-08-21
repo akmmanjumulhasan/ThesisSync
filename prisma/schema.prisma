@@ -62,6 +62,17 @@ model User {
   role         Role     @default(STUDENT)
   createdAt    DateTime @default(now())
 
+  /// Module 3 (Member 3): Smart Notification System.
+  ///
+  /// Where alerts are emailed. Separate from `email`, which is the university
+  /// address the account was registered with and is often not a mailbox anyone
+  /// reads — a student signs up as `23101266@g.bracu.ac.bd` and lives in Gmail.
+  /// Sending alerts to an inbox nobody opens is the same as not sending them.
+  ///
+  /// Null means fall back to `email`, so an account that never sets one still
+  /// gets its notifications rather than silently getting none.
+  notificationEmail String?
+
   // Module 1 (Member 1): Research Landscape & Trend Analyzer
   researchQueries ResearchQuery[]
 
@@ -88,11 +99,23 @@ model User {
   repoAccess    RepositoryAccess[] @relation("RepoAccess")
 
   // Module 1 (Member 2): supervisor-approved teammate removal
-  removalRequestsMade     TeamRemovalRequest[] @relation("RemovalRequester")
-  removalRequestsAgainst  TeamRemovalRequest[] @relation("RemovalTarget")
+  removalRequestsMade    TeamRemovalRequest[] @relation("RemovalRequester")
+  removalRequestsAgainst TeamRemovalRequest[] @relation("RemovalTarget")
 
   // Module 2 (Member 3): Topic Novelty & Similarity Checker
   noveltyChecks NoveltyCheck[] @relation("NoveltyChecks")
+
+  // Module 3 (Member 1): Version Control & Inline Annotation
+  chapterDrafts ChapterDraft[] @relation("ChapterDraftStudent")
+  draftComments DraftComment[] @relation("DraftCommentAuthor")
+
+  // Module 3 (Member 3): Chapter Approval Workflow
+  chapters     ThesisChapter[]     @relation("StudentChapters")
+  chapterAudit ChapterAuditEntry[] @relation("ChapterActor")
+
+  // Module 3 (Member 3): Smart Notification System
+  notifications           Notification[]           @relation("Recipient")
+  notificationPreferences NotificationPreference[] @relation("NotifyPrefs")
 }
 
 /// Module 1 (Member 1): Research Landscape & Trend Analyzer.
@@ -209,10 +232,15 @@ model TeamInvite {
 /// revised in place (see ProposalHistoryEntry for the version/feedback
 /// timeline) rather than resubmitted as a new record each time.
 ///
-/// title/abstract/methodology/limitations predate this feature (added as a
-/// placeholder for Module 3 (Member 2)'s Mock Defense Simulator, which reads
-/// a proposal's content as AI context) and are kept, now default-valued, so
-/// that still-planned feature isn't blocked by this one shipping first.
+/// title/abstract are the thesis's identity, and the proposal form collects
+/// them: they are required to submit. Downstream modules read them rather than
+/// inventing their own — Module 3 (Member 2)'s Mock Defense Simulator uses them
+/// as the examiner's context, and its IEEE Paper Transpiler loads them as the
+/// paper's title and abstract. They were default-valued placeholders until the
+/// form asked for them, which meant both of those readers silently got "".
+///
+/// methodology/limitations still predate this feature and remain default-valued;
+/// methodologyOutline superseded methodology.
 model ThesisProposal {
   id          String @id @default(uuid())
   title       String @default("")
@@ -431,18 +459,18 @@ enum RepoAccessRole {
 /// that proved it is kept for display. Boards themselves stay keyed by the repo
 /// full name, so teammates who each connect the same repo share one board.
 model RepositoryAccess {
-  id         String         @id @default(uuid())
-  userId     String
-  user       User           @relation("RepoAccess", fields: [userId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation("RepoAccess", fields: [userId], references: [id], onDelete: Cascade)
   /// "owner/name", exactly as GitHub canonicalises it.
-  fullName   String
-  role       RepoAccessRole
+  fullName    String
+  role        RepoAccessRole
   /// The GitHub login the check was made against, so a later re-verification
   /// against a different account is visibly a different claim.
   githubLogin String
-  isPrivate  Boolean        @default(false)
-  verifiedAt DateTime       @default(now())
-  createdAt  DateTime       @default(now())
+  isPrivate   Boolean        @default(false)
+  verifiedAt  DateTime       @default(now())
+  createdAt   DateTime       @default(now())
 
   @@unique([userId, fullName])
   @@index([fullName])
@@ -507,20 +535,20 @@ model NoveltyCheck {
   sourceName String?
   /// Word count of what was actually scored, so a near-empty upload is visible
   /// rather than silently producing a flattering score.
-  wordCount  Int    @default(0)
+  wordCount  Int     @default(0)
 
   /// 0-100, higher is more novel. Title/abstract runs only.
-  noveltyScore   Int?
+  noveltyScore    Int?
   /// 0-100 highest cosine similarity found against the archive.
-  topSimilarity  Int            @default(0)
-  risk           SimilarityRisk @default(LOW)
+  topSimilarity   Int            @default(0)
+  risk            SimilarityRisk @default(LOW)
   /// Angles the corpus barely covers, and methodologies it already covers.
-  understudied   String[]       @default([])
-  alreadyCovered String[]       @default([])
+  understudied    String[]       @default([])
+  alreadyCovered  String[]       @default([])
   /// How many archived theses and external papers this was scored against, so
   /// the number shown to the student is the real corpus size at run time.
-  archiveSize    Int            @default(0)
-  externalSize   Int            @default(0)
+  archiveSize     Int            @default(0)
+  externalSize    Int            @default(0)
   /// The published papers this run actually matched: [{ title, venue, year,
   /// url, score }]. Stored so a result stays checkable after the fact, rather
   /// than collapsing into a single opaque percentage.
@@ -535,16 +563,16 @@ model NoveltyCheck {
 
 /// Module 2 (Member 3): a single archived thesis a run matched against.
 model SimilarityMatch {
-  id       String       @id @default(uuid())
-  checkId  String
-  check    NoveltyCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  thesisId String
-  thesis   ArchivedThesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
+  id          String         @id @default(uuid())
+  checkId     String
+  check       NoveltyCheck   @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  thesisId    String
+  thesis      ArchivedThesis @relation(fields: [thesisId], references: [id], onDelete: Cascade)
   /// 0-100 cosine similarity.
-  score    Int
+  score       Int
   /// The terms that drove the overlap, so a flagged match can be explained
   /// rather than just asserted.
-  sharedTerms String[] @default([])
+  sharedTerms String[]       @default([])
 
   @@unique([checkId, thesisId])
 }
@@ -573,4 +601,351 @@ model LiteratureCache {
   fetchedAt DateTime @default(now())
 
   @@index([fetchedAt])
+}
+
+/// Module 3 (Member 1): Version Control & Inline Annotation (API: LanguageTool).
+/// A chapter is a named unit of thesis writing a student maintains across many
+/// saved, immutable versions.
+///
+/// Named ChapterDraft, not ThesisChapter, because Module 3 (Member 3)'s Chapter
+/// Approval Workflow already owns that name for its own, differently-shaped
+/// chapter (a single edit-in-place row moving through an approval pipeline).
+/// The two are deliberately separate entities — see that model's docstring —
+/// so this one keeps its own name rather than merging into it.
+model ChapterDraft {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation("ChapterDraftStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions DraftVersion[]
+
+  @@unique([studentId, title])
+  @@index([studentId])
+}
+
+/// One timestamped snapshot of a chapter's content. versionNumber is 1-based
+/// and increments per chapter; diffs between any two versions are computed on
+/// demand (see src/lib/diff.ts) rather than stored.
+model DraftVersion {
+  id            String       @id @default(uuid())
+  chapterId     String
+  chapter       ChapterDraft @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  versionNumber Int
+  content       String
+  wordCount     Int
+  /// LanguageToolService.check() result cached at save time so it isn't
+  /// re-fetched on every view: { issues: [{ message, shortMessage, offset,
+  /// length, ruleId, category, replacements }] }. Null means the check
+  /// couldn't be completed (external API unreachable), not "no issues found".
+  writingCheck  Json?
+  createdAt     DateTime     @default(now())
+
+  comments DraftComment[]
+
+  @@unique([chapterId, versionNumber])
+  @@index([chapterId, createdAt])
+}
+
+/// A supervisor's (or student's own) inline comment anchored to a character
+/// range within one version's content.
+model DraftComment {
+  id          String       @id @default(uuid())
+  versionId   String
+  version     DraftVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User         @relation("DraftCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  startOffset Int
+  endOffset   Int
+  quotedText  String
+  body        String
+  resolved    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  @@index([versionId])
+}
+
+/// Module 3 (Member 3): Chapter Approval Workflow.
+///
+/// The five pipeline stages, in order. A chapter never skips one: the only
+/// legal moves are the ones enumerated in src/lib/chapters.ts, and every move
+/// past DRAFT is made by the supervisor, never by the system and never by the
+/// student.
+///
+/// APPROVED and LOCKED are deliberately different in kind, not just in name.
+/// APPROVED means the supervisor accepts the content, and is reversible: the
+/// student may withdraw it to amend (which cancels the approval), and the
+/// supervisor may take it back. LOCKED is the commitment of the chapter to the
+/// final thesis.
+///
+/// LOCKED is therefore terminal, and it is the only state that is. Nothing
+/// transitions out of it, for either party — a locked chapter that turned out
+/// to be wrong is corrected as a matter of record, not by quietly reopening the
+/// row. This is the state the requirement means by "the student cannot make
+/// further edits", and it does real work precisely because APPROVED does not
+/// already freeze the chapter.
+enum ChapterStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  LOCKED
+}
+
+/// Module 3 (Member 3): what a ChapterAuditEntry records.
+///
+/// This is deliberately not the same set as ChapterStatus. RETURNED and
+/// REOPENED are events with no matching state (both land the chapter back in
+/// DRAFT), and CREATED marks the chapter's existence rather than a transition —
+/// all three are needed for the trail to read as a complete history rather than
+/// a status log.
+///
+/// REOPENED is the student withdrawing their own approved chapter to amend it.
+/// It is recorded separately from RETURNED so the trail always distinguishes
+/// "the supervisor sent this back" from "the student pulled this back", which
+/// are very different facts about who was dissatisfied.
+enum ChapterEvent {
+  CREATED
+  SUBMITTED
+  REVIEW_STARTED
+  APPROVED
+  RETURNED
+  REOPENED
+  LOCKED
+}
+
+/// Module 3 (Member 3): one chapter of a student's thesis, moving through the
+/// approval pipeline.
+///
+/// Content is edited in place rather than versioned per submission — draft
+/// history and inline comments are Module 3 (Member 1)'s Version Control &
+/// Inline Annotation feature, and duplicating a weaker version of it here would
+/// put two disagreeing histories in the same database. What this model owns is
+/// the *approval* record: which stage the chapter is at, and who moved it
+/// there.
+///
+/// `version` counts submission rounds, so a chapter returned twice and approved
+/// on the third attempt reads as v3 in the trail. It matches ThesisProposal's
+/// meaning of the same field.
+model ThesisChapter {
+  id        String @id @default(uuid())
+  studentId String
+  student   User   @relation("StudentChapters", fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// 1-based position in the thesis. Unique per student, and renumbered when a
+  /// draft chapter is removed so the ordering never develops holes.
+  number  Int
+  title   String
+  content String @default("")
+
+  status  ChapterStatus @default(DRAFT)
+  version Int           @default(1)
+
+  /// When the current round was submitted. Orders the supervisor's queue oldest
+  /// first, so the chapter that has been waiting longest is reviewed first.
+  submittedAt DateTime?
+
+  /// Module 3 (Member 3): Smart Notification System.
+  ///
+  /// The date this chapter is expected by, set by the supervisor. Null means no
+  /// deadline, which is not the same as an overdue one — a chapter nobody has
+  /// dated should never generate a reminder.
+  ///
+  /// Lives on the chapter rather than in a separate Deadline model because a
+  /// deadline here is always *for* a chapter: there is nothing else in the
+  /// thesis lifecycle that falls due, and a standalone table would need a
+  /// polymorphic subject to say the same thing.
+  dueAt              DateTime?
+  /// Set when a DEADLINE_APPROACHING notification has gone out for the current
+  /// dueAt, so a scheduler that runs hourly does not send an hourly reminder.
+  /// Cleared whenever dueAt changes.
+  deadlineNotifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  audit ChapterAuditEntry[]
+
+  @@unique([studentId, number])
+  @@index([studentId, status])
+}
+
+/// Module 3 (Member 3): one row per stage transition — the audit trail.
+///
+/// Append-only by construction: nothing in the app updates or deletes a row
+/// here, because the accountability the feature promises is worth nothing if
+/// the record can be edited after the fact. A chapter can only be deleted
+/// before it has ever been submitted, which is the one case where there is no
+/// approval history to destroy.
+///
+/// fromStatus/toStatus are stored rather than derived from the neighbouring
+/// rows so a single entry is independently readable, and so the trail survives
+/// any later change to the pipeline's shape.
+///
+/// actorRole is captured at write time. A user's role could in principle change
+/// later, and "approved by a supervisor" must stay true about the moment the
+/// approval happened.
+model ChapterAuditEntry {
+  id        String        @id @default(uuid())
+  chapterId String
+  chapter   ThesisChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  event      ChapterEvent
+  /// Null on CREATED, which has no prior state.
+  fromStatus ChapterStatus?
+  toStatus   ChapterStatus
+  /// The submission round this happened in.
+  version    Int            @default(1)
+
+  /// Required on RETURNED — a chapter is never sent back without a reason.
+  comment String?
+
+  /// Nullable so a deleted account never takes the approval record with it.
+  actorId   String?
+  actor     User?   @relation("ChapterActor", fields: [actorId], references: [id], onDelete: SetNull)
+  /// Denormalised so the trail still names its actor after an account is gone.
+  actorName String
+  actorRole Role
+
+  createdAt DateTime @default(now())
+
+  @@index([chapterId, createdAt])
+}
+
+/// Module 3 (Member 3): Smart Notification System.
+///
+/// The events the platform can tell someone about. One value per thing that
+/// actually happens, because preferences are stored per event — a student who
+/// wants an email the moment a chapter is returned but nothing at all for a
+/// contribution update needs those to be separately addressable.
+///
+/// Named after the event, not the recipient: CHAPTER_RETURNED is the same
+/// occurrence whether it lands on the student who wrote it or the supervisor
+/// who sent it back, and duplicating the enum per audience would double every
+/// preference row for no gain.
+enum NotificationEvent {
+  PROPOSAL_APPROVED
+  PROPOSAL_RETURNED
+  CHAPTER_SUBMITTED
+  CHAPTER_APPROVED
+  CHAPTER_RETURNED
+  CHAPTER_LOCKED
+  SUPERVISOR_COMMENT
+  DEADLINE_APPROACHING
+  MATCH_REQUEST_RECEIVED
+  MATCH_REQUEST_DECIDED
+  TEAM_INVITE_RECEIVED
+  CONTRIBUTION_UPDATE
+}
+
+/// Module 3 (Member 3): where a notification is delivered.
+///
+/// IN_APP is not configurable and is always written. It is the record that the
+/// event happened at all, and the bell menu reads it; letting a user switch it
+/// off would mean events silently vanishing with nothing to audit against.
+/// EMAIL is the one a user opts into.
+///
+/// The requirement also names SMS via Twilio. It is not implemented: Twilio
+/// could not reliably deliver to the Bangladeshi numbers this platform's users
+/// have, and an alert channel that silently never arrives is worse than one
+/// that was never offered.
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+/// Module 3 (Member 3): how one delivery attempt ended.
+///
+/// SKIPPED is distinct from FAILED on purpose. "The user turned email off" and
+/// "EmailJS rejected the address" look identical in a boolean and need
+/// completely different responses — one is correct behaviour, the other is a bug.
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+/// Module 3 (Member 3): one thing that happened, addressed to one person.
+///
+/// Written for every event regardless of channel preferences, so the in-app
+/// feed is always complete and a user who later turns email on can still see
+/// what they missed. The per-channel outcome lives in NotificationDelivery.
+///
+/// The message is rendered at write time rather than at read time. A
+/// notification describes a moment — "Dr. Islam returned Chapter 3" — and
+/// re-deriving that later from live rows would silently rewrite history once
+/// the chapter moved on again.
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("Recipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  event NotificationEvent
+  title String
+  body  String
+
+  /// Where to go to act on it. Relative path, so it survives a domain change.
+  link String?
+
+  /// What it is about, for de-duplication and for cleaning up if the subject is
+  /// deleted. Loose by design: notifications outlive the rows they describe.
+  subjectType String?
+  subjectId   String?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  deliveries NotificationDelivery[]
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, event, subjectId])
+}
+
+/// Module 3 (Member 3): one attempt to push a notification down one channel.
+///
+/// Kept even when it was skipped or failed. "Why didn't I get a text?" is the
+/// single most common question a notification system has to answer, and without
+/// a per-channel record the only honest answer is a shrug.
+///
+/// providerId holds EmailJS's response, so a delivery can be traced in the
+/// provider's own dashboard.
+model NotificationDelivery {
+  id             String       @id @default(uuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  channel     NotificationChannel
+  status      DeliveryStatus      @default(PENDING)
+  /// Where it went — the address at send time, since a user can change theirs.
+  destination String?
+  /// Provider message id on success, or the reason on failure/skip.
+  detail      String?
+  providerId  String?
+  attemptedAt DateTime            @default(now())
+
+  @@unique([notificationId, channel])
+  @@index([status, attemptedAt])
+}
+
+/// Module 3 (Member 3): one user's choice for one event.
+///
+/// Absent means "use the default for this event" rather than "off" — see
+/// DEFAULT_CHANNELS in src/lib/notifications.ts. Storing only the deviations
+/// keeps a new user from needing a dozen rows written at signup, and lets the
+/// sensible default change later without a migration rewriting everyone's
+/// settings.
+model NotificationPreference {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("NotifyPrefs", fields: [userId], references: [id], onDelete: Cascade)
+
+  event NotificationEvent
+  email Boolean           @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, event])
 }

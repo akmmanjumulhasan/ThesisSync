@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { LogoutButton } from "@/components/LogoutButton";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { stageGroups } from "@/lib/roadmap";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -24,9 +25,11 @@ const SUPERVISOR_NAV: NavGroup[] = [
     items: [
       { number: 1, title: "Supervision requests", href: "/dashboard/requests" },
       { number: 2, title: "Proposals to review", href: "/dashboard/proposal-reviews" },
-      { number: 3, title: "Contribution analytics", href: "/dashboard/contribution" },
-      { number: 4, title: "Thesis repository", href: "/dashboard/repository" },
-      { number: 5, title: "Profile", href: "/dashboard/profile" },
+      { number: 3, title: "Chapters to review", href: "/dashboard/chapter-reviews" },
+      { number: 4, title: "Drafts to review", href: "/dashboard/draft-reviews" },
+      { number: 5, title: "Contribution analytics", href: "/dashboard/contribution" },
+      { number: 6, title: "Thesis repository", href: "/dashboard/repository" },
+      { number: 7, title: "Profile", href: "/dashboard/profile" },
     ],
   },
 ];
@@ -116,6 +119,9 @@ export function Sidebar({ session }: { session: SessionPayload }) {
             <p className="truncate text-sm font-medium text-sidebar-fg">{session.name}</p>
             <LogoutButton className="text-xs text-sidebar-muted hover:text-sidebar-fg" />
           </div>
+          {/* Module 3 (Member 3): sits with the account, not in the nav list —
+              it is a state indicator, not a destination. */}
+          <NotificationBell />
         </div>
       </div>
     </aside>

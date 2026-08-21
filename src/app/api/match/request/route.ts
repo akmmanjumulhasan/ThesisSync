@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { RequestStatus, Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { NotificationService } from "@/services/notification.service";
 
 /** Supervisor mode: the student sends a supervision request directly from the ranked list. */
 export async function POST(req: Request) {
@@ -27,6 +28,20 @@ export async function POST(req: Request) {
     where: { studentId_supervisorId: { studentId: session.sub, supervisorId } },
     update: { status: RequestStatus.PENDING },
     create: { studentId: session.sub, supervisorId, status: RequestStatus.PENDING },
+  });
+
+  // Module 3 (Member 3): Smart Notification System. Deduped over an hour so a
+  // student clicking twice does not put two identical alerts on a supervisor's
+  // desk — the upsert above makes a repeat request legal, but not newsworthy.
+  await NotificationService.safeNotify({
+    userId: supervisor.userId,
+    event: "MATCH_REQUEST_RECEIVED",
+    title: `${session.name} asked you to supervise`,
+    body: `${session.name} sent you a supervision request. Accept or decline it from your requests page.`,
+    link: "/dashboard/requests",
+    subjectType: "matchRequest",
+    subjectId: matchRequest.id,
+    dedupeWithinMs: 60 * 60 * 1000,
   });
 
   return NextResponse.json({ success: true, request: matchRequest });
@@ -66,6 +81,22 @@ export async function PATCH(req: Request) {
       });
     }
     return updatedRequest;
+  });
+
+  await NotificationService.safeNotify({
+    userId: existing.studentId,
+    event: "MATCH_REQUEST_DECIDED",
+    title:
+      newStatus === RequestStatus.ACCEPTED
+        ? `${session.name} accepted your supervision request`
+        : `${session.name} declined your supervision request`,
+    body:
+      newStatus === RequestStatus.ACCEPTED
+        ? `${session.name} is now your supervisor. You can submit your proposal for approval.`
+        : `${session.name} is not taking you on. You can send a request to another supervisor.`,
+    link: "/dashboard/matchmaking",
+    subjectType: "matchRequest",
+    subjectId: requestId,
   });
 
   return NextResponse.json({ success: true, request: updated });

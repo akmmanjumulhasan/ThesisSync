@@ -130,6 +130,8 @@ export function ProposalBuilderClient({
       const p = data.proposal;
       setStatus(p.status);
       setVersion(p.version);
+      setTitle(p.title ?? "");
+      setAbstract(p.abstract ?? "");
       setRefRows(
         p.references.length
           ? p.references
@@ -190,23 +192,32 @@ export function ProposalBuilderClient({
         )}
         {error && <p className="text-sm text-danger-foreground">{error}</p>}
 
-        {/* Title + Abstract — feed the University Thesis Repository once approved */}
+        {/*
+          Title and abstract lead, because they are what the work is called
+          rather than what it plans to do — and they are what every downstream
+          module identifies this thesis by: the IEEE Paper Transpiler loads them
+          as the paper's identity, the Mock Defense Simulator uses them as the
+          examiner's context, and the University Thesis Repository (Module 3,
+          Member 1) indexes on them once the proposal is approved.
+        */}
         <div className="rounded-lg border border-border bg-surface p-5">
           <label className="mb-2 block text-sm font-medium text-muted">Thesis title</label>
           <input
             value={title}
             disabled={locked}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="A concise, descriptive title for the finished thesis"
+            maxLength={300}
+            placeholder="The title this thesis will be known by."
             className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-accent disabled:opacity-70"
           />
         </div>
+
         <Field
           label="Abstract"
           value={abstract}
           onChange={setAbstract}
           disabled={locked}
-          placeholder="A short summary of the problem, approach, and expected contribution."
+          placeholder="A short summary of the whole thesis: the problem, the approach, and what it contributes."
         />
 
         {/* Problem statement + Methodology outline */}

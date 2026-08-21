@@ -2,6 +2,7 @@ import "server-only";
 import type { GitEventType, TaskStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { parseTaskReferences, shortSha } from "@/lib/git-analytics";
+import { NotificationService } from "@/services/notification.service";
 
 /**
  * Module 2 (Member 2): Git-to-Task Contribution Analytics — ingestion.
@@ -86,6 +87,26 @@ export async function ingestEvents(events: IncomingEvent[]): Promise<IngestResul
         where: { id: task.id },
         data: { status: ref.intent, autoNote: trace },
       });
+
+      // Module 3 (Member 3): Smart Notification System.
+      //
+      // Only the assignee is told, and only when someone else moved their card.
+      // A developer whose own commit moved their own task already knows; the
+      // alert exists for the case where a teammate's merge closed work you were
+      // holding. Deduped over an hour so a push of twenty commits referencing
+      // the same task produces one alert, not twenty.
+      if (task.assigneeId) {
+        await NotificationService.safeNotify({
+          userId: task.assigneeId,
+          event: "CONTRIBUTION_UPDATE",
+          title: `${task.key} moved to ${ref.intent.replace(/_/g, " ").toLowerCase()}`,
+          body: `"${task.title}" ${trace}${event.actorName ? ` by ${event.actorName}` : ""}.`,
+          link: "/dashboard/contribution",
+          subjectType: "task",
+          subjectId: task.id,
+          dedupeWithinMs: 60 * 60 * 1000,
+        });
+      }
 
       if (task.id === linkedTaskId) movedTo = ref.intent;
       result.movedTasks.push({ key: task.key, to: ref.intent });

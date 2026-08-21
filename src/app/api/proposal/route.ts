@@ -7,6 +7,20 @@ import { CrossRefService } from "@/services/crossref.service";
 const CORE_FIELDS = ["problemStatement", "researchObjectives", "methodologyOutline", "expectedContribution"] as const;
 
 /**
+ * The thesis title and abstract.
+ *
+ * Held apart from CORE_FIELDS because they are shorter and differently capped,
+ * but they are required to submit just the same: a proposal without a title is
+ * not a proposal, and both are what downstream modules identify the work by —
+ * the IEEE Paper Transpiler loads them as the paper's identity, the Mock
+ * Defense Simulator uses them as the examiner's context, and the University
+ * Thesis Repository (Module 3, Member 1) indexes on them once the proposal is
+ * approved. Until this form collected them, all three read empty columns.
+ */
+const TITLE_MAX = 300;
+const ABSTRACT_MAX = 4000;
+
+/**
  * Structured Thesis Proposal Builder: the signed-in student's proposal, its
  * CrossRef-resolved references, and its submission/feedback history.
  */
@@ -58,11 +72,8 @@ export async function POST(req: Request) {
     const value = typeof body[key] === "string" ? body[key].trim().slice(0, 4000) : "";
     fields[key] = value;
   }
-  // title/abstract feed the University Thesis Repository (Module 3, Member 1)
-  // once this proposal is approved — not part of CORE_FIELDS since they
-  // predate this feature and are validated/capped separately here.
-  const title = typeof body.title === "string" ? body.title.trim().slice(0, 300) : "";
-  const abstract = typeof body.abstract === "string" ? body.abstract.trim().slice(0, 4000) : "";
+  fields.title = typeof body.title === "string" ? body.title.trim().slice(0, TITLE_MAX) : "";
+  fields.abstract = typeof body.abstract === "string" ? body.abstract.trim().slice(0, ABSTRACT_MAX) : "";
 
   const dois: string[] = Array.isArray(body.dois)
     ? [...new Set(body.dois.map((d: unknown) => (typeof d === "string" ? d.trim() : "")).filter(Boolean) as string[])]
@@ -78,7 +89,13 @@ export async function POST(req: Request) {
   }
 
   if (submit) {
-    if (CORE_FIELDS.some((key) => !fields[key]) || !title || !abstract) {
+    if (!fields.title || !fields.abstract) {
+      return NextResponse.json(
+        { error: "A thesis title and abstract are required to submit." },
+        { status: 400 }
+      );
+    }
+    if (CORE_FIELDS.some((key) => !fields[key])) {
       return NextResponse.json(
         {
           error:
@@ -115,8 +132,6 @@ export async function POST(req: Request) {
       where: { studentId: session.sub },
       update: {
         ...fields,
-        title,
-        abstract,
         status: submit ? ProposalStatus.SUBMITTED : (existing?.status ?? ProposalStatus.DRAFT),
         version: nextVersion,
         submittedAt: submit ? new Date() : existing?.submittedAt,
@@ -124,8 +139,6 @@ export async function POST(req: Request) {
       create: {
         studentId: session.sub,
         ...fields,
-        title,
-        abstract,
         status: submit ? ProposalStatus.SUBMITTED : ProposalStatus.DRAFT,
         version: 1,
         submittedAt: submit ? new Date() : null,
