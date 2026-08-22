@@ -359,7 +359,13 @@ export function DraftsClient({ initialChapters }: { initialChapters: ChapterSumm
                         <li key={c.id} className="rounded-md border border-border bg-background p-3 text-sm">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="font-medium text-foreground">{c.authorName}</p>
-                            <Badge tone={c.resolved ? "success" : "neutral"}>{c.resolved ? "Resolved" : "Open"}</Badge>
+                            <button
+                              type="button"
+                              onClick={() => resolveComment(c.id, !c.resolved)}
+                              title={c.resolved ? "Click to mark as open" : "Click to mark as resolved"}
+                            >
+                              <Badge tone={c.resolved ? "success" : "neutral"}>{c.resolved ? "Resolved" : "Open"}</Badge>
+                            </button>
                           </div>
                           {c.quotedText && <p className="mt-1 border-l-2 border-border pl-2 text-xs italic text-muted">&ldquo;{c.quotedText}&rdquo;</p>}
                           <p className="mt-1.5 text-foreground">{c.body}</p>

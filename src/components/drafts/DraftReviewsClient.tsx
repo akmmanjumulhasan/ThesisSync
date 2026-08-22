@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { computeWordDiff, type DiffToken } from "@/lib/diff";
 
 interface CommentRow {
   id: string;
@@ -68,6 +69,9 @@ export function DraftReviewsClient({ chapters }: { chapters: ChapterRow[] }) {
   const [posting, setPosting] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  const [diffA, setDiffA] = useState<string>("");
+  const [diffB, setDiffB] = useState<string>("");
+
   async function openChapter(chapter: ChapterRow) {
     setSelectedId(chapter.id);
     setChapterTitle(chapter.title);
@@ -85,6 +89,13 @@ export function DraftReviewsClient({ chapters }: { chapters: ChapterRow[] }) {
       }
       setVersions(data.versions);
       setActiveVersionId(data.versions[0]?.id ?? "");
+      if (data.versions.length >= 2) {
+        setDiffA(data.versions[1].id);
+        setDiffB(data.versions[0].id);
+      } else {
+        setDiffA("");
+        setDiffB("");
+      }
     } catch {
       setError("Network error — check your connection and try again.");
     } finally {
@@ -156,6 +167,13 @@ export function DraftReviewsClient({ chapters }: { chapters: ChapterRow[] }) {
   }
 
   const activeVersion = versions?.find((v) => v.id === activeVersionId) ?? null;
+  const diffTokens: DiffToken[] | null =
+    versions && diffA && diffB
+      ? computeWordDiff(
+          versions.find((v) => v.id === diffA)?.content ?? "",
+          versions.find((v) => v.id === diffB)?.content ?? ""
+        )
+      : null;
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
@@ -250,6 +268,36 @@ export function DraftReviewsClient({ chapters }: { chapters: ChapterRow[] }) {
                 )}
               </div>
 
+              {/* Diff view */}
+              {versions.length >= 2 && (
+                <div className="rounded-lg border border-border bg-surface p-5">
+                  <h3 className="font-semibold text-foreground">Compare versions</h3>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                    <VersionSelect versions={versions} value={diffA} onChange={setDiffA} />
+                    <span className="text-muted">→</span>
+                    <VersionSelect versions={versions} value={diffB} onChange={setDiffB} />
+                  </div>
+                  {diffTokens && (
+                    <p className="mt-3 whitespace-pre-wrap rounded-md border border-border bg-background p-3 text-sm leading-relaxed">
+                      {diffTokens.map((t, i) => (
+                        <span
+                          key={i}
+                          className={
+                            t.type === "add"
+                              ? "bg-success-bg text-success-foreground"
+                              : t.type === "remove"
+                                ? "bg-danger-bg text-danger-foreground line-through"
+                                : "text-foreground"
+                          }
+                        >
+                          {t.value}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {activeVersion && (
                 <div className="rounded-lg border border-border bg-surface p-5">
                   <h3 className="font-semibold text-foreground">Comments — v{activeVersion.versionNumber}</h3>
@@ -261,7 +309,13 @@ export function DraftReviewsClient({ chapters }: { chapters: ChapterRow[] }) {
                         <li key={c.id} className="rounded-md border border-border bg-background p-3 text-sm">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="font-medium text-foreground">{c.authorName}</p>
-                            <Badge tone={c.resolved ? "success" : "neutral"}>{c.resolved ? "Resolved" : "Open"}</Badge>
+                            <button
+                              type="button"
+                              onClick={() => resolveComment(c.id, !c.resolved)}
+                              title={c.resolved ? "Click to mark as open" : "Click to mark as resolved"}
+                            >
+                              <Badge tone={c.resolved ? "success" : "neutral"}>{c.resolved ? "Resolved" : "Open"}</Badge>
+                            </button>
                           </div>
                           {c.quotedText && <p className="mt-1 border-l-2 border-border pl-2 text-xs italic text-muted">&ldquo;{c.quotedText}&rdquo;</p>}
                           <p className="mt-1.5 text-foreground">{c.body}</p>
@@ -283,5 +337,29 @@ export function DraftReviewsClient({ chapters }: { chapters: ChapterRow[] }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function VersionSelect({
+  versions,
+  value,
+  onChange,
+}: {
+  versions: VersionRow[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-accent"
+    >
+      {versions.map((v) => (
+        <option key={v.id} value={v.id}>
+          v{v.versionNumber}
+        </option>
+      ))}
+    </select>
   );
 }
