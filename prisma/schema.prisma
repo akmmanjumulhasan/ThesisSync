@@ -132,6 +132,34 @@ model User {
   // Common workflow: Admin role & access management
   adminActionsTaken    AdminAuditLog[] @relation("AuditActor")
   adminActionsReceived AdminAuditLog[] @relation("AuditTarget")
+
+  // Common workflow: Registration & Login — self-service password recovery
+  passwordResetOtps PasswordResetOtp[] @relation("PasswordResetOtps")
+}
+
+/// Common workflow: Registration & Login.
+///
+/// A one-time code for the "forgot password" flow. /api/auth/change-password
+/// already lets a signed-in user change their password, but it requires the
+/// *current* password — no help to someone who is actually locked out. This is
+/// what proves they still control their email before a new password is
+/// accepted, without needing an admin to hand out a temporary one.
+model PasswordResetOtp {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation("PasswordResetOtps", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// bcrypt hash of the 6-digit code — never the code itself, so this table
+  /// isn't a "log in as anyone" list if it ever leaked.
+  codeHash  String
+  expiresAt DateTime
+  /// Failed compare attempts against this code. Locked out past 5 so the
+  /// 6-digit space can't be brute-forced inside its 10-minute lifetime.
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// Common workflow: Admin role & access management.
