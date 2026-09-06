@@ -1,6 +1,7 @@
 import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 import { cookies } from "next/headers";
 
 const secretEnv = process.env.JWT_SECRET;
@@ -74,4 +75,21 @@ export async function setSessionCookie(token: string) {
 export async function clearSessionCookie() {
   const store = await cookies();
   store.delete(SESSION_COOKIE);
+}
+
+// --- Forgot-password OTPs ---------------------------------------------------
+// Reuses the same bcrypt hash/compare as passwords: a 6-digit code is just
+// another secret that must never be stored (or leaked) in plain text.
+
+/** A random 6-digit code, e.g. "042917". Left-padded so it's always 6 digits. */
+export function generateOtp(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+export async function hashOtp(code: string): Promise<string> {
+  return bcrypt.hash(code, 10);
+}
+
+export async function verifyOtp(code: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(code, hash);
 }
